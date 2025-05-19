@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.1] - 2025-05-19
+
+### Hinzugefügt
+
+- **Karte archivieren Dialogfluss**: Neuer mehrstufiger Dialog zum Archivieren von Karten, analog zu den bestehenden Flows für "Karte erstellen", "Liste erstellen" und "Karte umbenennen".
+  - Neuer Flow `ArchiveCardFlow` mit eigenem State-Handling, Fehlerbehandlung und Bestätigungsdialog.
+  - Integration der API-Funktion `archiveCardOnTrello(key, token, cardId, onSuccess, onError)` zum Archivieren einer Karte (setzt `closed=true` via PUT-Request).
+  - Nutzer können jetzt per Sprachbefehl Karten archivieren, inklusive Auswahl von Board, Liste und Karte sowie Bestätigung.
+  - UI-Kontextanzeige und Statusmeldungen für den Archivierungsprozess.
+
 ## [1.2.0] - 2025-05-19
 
 ### Hinzugefügt
