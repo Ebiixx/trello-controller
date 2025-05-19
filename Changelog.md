@@ -25,6 +25,24 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/spec/v
     - Möglichkeit, Boards/Listen vorzuschlagen, wenn sie nicht gefunden wurden.
 - Anpassung der `ControllerState` Enum und zugehöriger Logik für den neuen Dialogablauf.
 - Erfolgsmeldungen im Trello-Status zeigen nun die durch Fuzzy-Matching korrigierten Board- und Listennamen an.
+- Implementierung eines mehrstufigen Dialogflusses für "Liste erstellen":
+    - Separate Abfrage von Board und neuem Listennamen.
+    - Bestätigung vor der Erstellung.
+- Implementierung eines mehrstufigen Dialogflusses für "Karte archivieren":
+    - Abfrage von Board, Liste und Karte.
+    - Bestätigung vor der Archivierung.
+    - Vorschlag von Karten, falls nicht eindeutig.
+- Implementierung eines mehrstufigen Dialogflusses für "Karte umbenennen":
+    - Abfrage von Board, Liste, Karte und neuem Kartentitel.
+    - Bestätigung vor der Umbenennung.
+- Implementierung eines mehrstufigen Dialogflusses für "Karte verschieben":
+    - Abfrage von Quell-Board, Quell-Liste, zu verschiebender Karte.
+    - Abfrage von Ziel-Board und Ziel-Liste.
+    - Bestätigung vor dem Verschieben.
+- Einführung generischer "Nicht gefunden"-Bestätigungsdialoge für Boards, Listen und Karten mit der Option, Vorschläge anzuzeigen.
+- Refactoring und Erweiterung der Zustandsvariablen (`current...`, `pending...FromAI`, `currentNew...`, `currentSource...`, `currentTarget...`) zur Unterstützung komplexerer Dialogabläufe.
+- Überarbeitung und Erweiterung der `proceedToAsk...` Hilfsfunktionen für spezifischere Abfragen.
+- Anpassung von `buildUiConfirmationText` und der UI-Statusanzeige zur Darstellung des Kontexts für alle neuen Aktionen.
 
 ### Behoben
 

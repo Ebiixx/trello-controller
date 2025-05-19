@@ -27,19 +27,28 @@ enum class ControllerState {
 
     // Add Card Flow
     AddCard_WaitingForBoardName,
-    AddCard_ConfirmBoardNotFound,
-    AddCard_WaitingForBoardNotFoundConfirmation,
+    AddCard_ConfirmBoardNotFound, // Used by AddList too
+    // AddCard_WaitingForBoardNotFoundConfirmation, // Combined into ConfirmBoardNotFound
 
     AddCard_WaitingForListName,
     AddCard_ConfirmListNotFound,
-    AddCard_WaitingForListNotFoundConfirmation,
+    // AddCard_WaitingForListNotFoundConfirmation, // Combined into ConfirmListNotFound
 
     AddCard_WaitingForCardTitle,
     AddCard_ConfirmCreation,
 
+    // Add List Flow
+    AddList_WaitingForBoardName,
+    // AddList_ConfirmBoardNotFound, // Reuses AddCard_ConfirmBoardNotFound
+    // AddList_WaitingForBoardNotFoundConfirmation, // Reuses AddCard_...
+
+    AddList_WaitingForNewListName,
+    AddList_ConfirmCreation,
+
+
     // General states
-    WaitingForConfirmation, // For full commands parsed by AI (old behavior)
-    ExecutingAction,
+    WaitingForConfirmation, // For full commands parsed by AI (old behavior for other actions)
+    ExecutingAction, // Might not be explicitly used if UI updates on trelloResult
     Finished
 }
 
@@ -51,10 +60,16 @@ class MainActivity : ComponentActivity() {
     private var currentTrelloAction by mutableStateOf<String?>(null)
     private var currentBoardId by mutableStateOf<String?>(null)
     private var currentBoardName by mutableStateOf<String?>(null)
-    private var currentListId by mutableStateOf<String?>(null)
-    private var currentListName by mutableStateOf<String?>(null)
+    private var currentListId by mutableStateOf<String?>(null) // Used for card's list
+    private var currentListName by mutableStateOf<String?>(null) // Used for card's list name
     private var currentCardTitle by mutableStateOf<String?>(null)
-    // private var currentCardDesc by mutableStateOf<String?>(null) // Future extension
+    private var currentNewListName by mutableStateOf<String?>(null) // For add_list action
+
+    private var pendingBoardNameFromAI by mutableStateOf<String?>(null)
+    private var pendingListNameFromAI by mutableStateOf<String?>(null)
+    private var pendingCardTitleFromAI by mutableStateOf<String?>(null)
+    private var pendingNewListNameFromAI by mutableStateOf<String?>(null)
+
 
     private fun startSpeechInput(prompt: String = "Bitte antworte jetzt") {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -165,18 +180,18 @@ class MainActivity : ComponentActivity() {
         }, onError)
     }
 
-    private fun buildConfirmationText(actionObj: JSONObject): String {
+    // This is for the old "single-shot" AI confirmation
+    private fun buildUiConfirmationText(actionObj: JSONObject): String {
         val action = actionObj.optString("action", "")
         val board = actionObj.optString("board", "")
-        val list = actionObj.optString("list", "")
+        val list = actionObj.optString("list", "") // For add_card, this is target list. For add_list, this is new list name.
         val title = actionObj.optString("title", "")
-        val desc = actionObj.optString("desc", "")
-        // ... (other fields if needed for other actions)
+        // ... other fields ...
         return when (action) {
-            "add_card" -> "Ich werde eine neue Karte mit dem Titel '$title'${if (desc.isNotBlank()) " und Beschreibung '$desc'" else ""} in der Liste '$list' im Board '$board' erstellen. Möchtest du das tun?"
-            "add_list" -> "Ich werde eine neue Liste mit dem Namen '$list' im Board '$board' anlegen. Ist das korrekt?"
-            // ... (other actions)
-            else -> "Aktion erkannt: ${actionObj.optString("action")} für Board '$board', Liste '$list', Titel '$title'. Möchtest du das ausführen?"
+            "add_card" -> "KI: Karte '$title' in Liste '$list' auf Board '$board' erstellen?"
+            "add_list" -> "KI: Liste '$list' auf Board '$board' erstellen?"
+            // ... other actions for single-shot confirmation
+            else -> "KI: Aktion ${actionObj.optString("action")} mit Details: ${actionObj}. Bestätigen?"
         }
     }
 
@@ -229,37 +244,43 @@ class MainActivity : ComponentActivity() {
             .replace("Ae", "Ä").replace("Oe", "Ö").replace("Ue", "Ü")
     }
 
-    private fun resetCardCreationFlow(nextState: ControllerState = ControllerState.WaitingForInitialCommand) {
+    private fun resetMultiTurnFlow() {
         currentTrelloAction = null
         currentBoardId = null
         currentBoardName = null
         currentListId = null
         currentListName = null
         currentCardTitle = null
-        // currentCardDesc = null
-        // Update the main state variable if needed, passed as parameter
-        // this.state = nextState // 'state' is a var in onCreate's scope
+        currentNewListName = null
+
+        pendingBoardNameFromAI = null
+        pendingListNameFromAI = null
+        pendingCardTitleFromAI = null
+        pendingNewListNameFromAI = null
     }
 
-    private fun proceedToAskBoardName() {
-        speakWithCallback("Okay, ich werde eine Karte erstellen. In welchem Board soll die Karte erstellt werden?") {
+    private fun proceedToAskBoardName(actionType: String) { // actionType "Karte" or "Liste"
+        speakWithCallback("Okay, ich werde eine $actionType erstellen. In welchem Board soll die $actionType erstellt werden?") {
             startSpeechInput("Bitte nenne das Board")
         }
-        // state = ControllerState.AddCard_WaitingForBoardName // This will be set by the caller
     }
 
-    private fun proceedToAskListName() {
+    private fun proceedToAskListNameForCard() { // For add_card
         speakWithCallback("Okay, im Board '$currentBoardName'. In welcher Liste soll die Karte erstellt werden?") {
             startSpeechInput("Bitte nenne die Liste")
         }
-        // state = ControllerState.AddCard_WaitingForListName // This will be set by the caller
+    }
+
+    private fun proceedToAskNewListName() { // For add_list
+        speakWithCallback("Okay, im Board '$currentBoardName'. Wie soll die neue Liste heißen?") {
+            startSpeechInput("Bitte nenne den Namen der neuen Liste")
+        }
     }
 
     private fun proceedToAskCardTitle() {
         speakWithCallback("Okay, in Liste '$currentListName' im Board '$currentBoardName'. Wie soll die Karte heißen?") {
             startSpeechInput("Bitte nenne den Titel der Karte")
         }
-        // state = ControllerState.AddCard_WaitingForCardTitle // This will be set by the caller
     }
 
 
@@ -274,7 +295,7 @@ class MainActivity : ComponentActivity() {
 
         var state by mutableStateOf(ControllerState.WaitingForInitialCommand)
         var spokenText by mutableStateOf("")
-        var actionJsonForUi by mutableStateOf<JSONObject?>(null) // For UI display of initial AI parse
+        var actionJsonForUi by mutableStateOf<JSONObject?>(null)
         var trelloResult by mutableStateOf("")
 
         textToSpeech = TextToSpeech(this) {
@@ -291,10 +312,12 @@ class MainActivity : ComponentActivity() {
                     ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
                     ?.getOrNull(0) ?: ""
                 val fixedSpoken = normalizeSpeechCommand(spoken)
-                spokenText = fixedSpoken // Update UI with what was heard
+                spokenText = fixedSpoken
 
                 when (state) {
                     ControllerState.WaitingForInitialCommand -> {
+                        actionJsonForUi = null // Clear previous AI full parse for UI
+                        resetMultiTurnFlow()   // Clear multi-turn states
                         val prompt = buildTrelloPrompt(fixedSpoken)
                         askAzureOpenAI(
                             prompt, azureApiKey, azureEndpoint, azureDeployment, azureApiVersion,
@@ -302,104 +325,147 @@ class MainActivity : ComponentActivity() {
                                 runOnUiThread {
                                     try {
                                         val obj = JSONObject(aiResultString)
-                                        actionJsonForUi = obj // Update UI with AI interpretation
+                                        actionJsonForUi = obj // Store for UI, if it's a single-shot action
                                         val action = obj.optString("action")
+                                        pendingBoardNameFromAI = obj.optString("board").takeIf { it.isNotBlank() }
+                                        pendingListNameFromAI = obj.optString("list").takeIf { it.isNotBlank() } // For add_card: target list; For add_list: new list name
 
-                                        if (action == "add_card") {
-                                            currentTrelloAction = "add_card"
-                                            val boardFromAI = obj.optString("board").takeIf { it.isNotBlank() }
-                                            val listFromAI = obj.optString("list").takeIf { it.isNotBlank() }
-                                            val titleFromAI = obj.optString("title").takeIf { it.isNotBlank() }
-
-                                            if (boardFromAI == null) {
-                                                proceedToAskBoardName()
-                                                state = ControllerState.AddCard_WaitingForBoardName
-                                            } else {
-                                                getBestMatchingBoardId(trelloKey, trelloToken, boardFromAI,
-                                                    onResult = { boardId, matchedBoard ->
-                                                        if (boardId != null) {
-                                                            currentBoardId = boardId
-                                                            currentBoardName = matchedBoard
-                                                            if (listFromAI == null) {
-                                                                proceedToAskListName()
-                                                                state = ControllerState.AddCard_WaitingForListName
-                                                            } else {
-                                                                getBestMatchingListId(trelloKey, trelloToken, boardId, listFromAI,
-                                                                    onResult = { listId, matchedList ->
-                                                                        if (listId != null) {
-                                                                            currentListId = listId
-                                                                            currentListName = matchedList
-                                                                            if (titleFromAI == null) {
-                                                                                proceedToAskCardTitle()
-                                                                                state = ControllerState.AddCard_WaitingForCardTitle
-                                                                            } else {
-                                                                                currentCardTitle = titleFromAI
-                                                                                val confirmMsg = "Ich werde eine neue Karte mit dem Titel '${currentCardTitle}' in der Liste '${currentListName}' im Board '${currentBoardName}' erstellen. Möchtest du das tun?"
-                                                                                speakWithCallback(confirmMsg) { startSpeechInput("Ja oder Nein?") }
-                                                                                state = ControllerState.AddCard_ConfirmCreation
+                                        when (action) {
+                                            "add_card" -> {
+                                                currentTrelloAction = "add_card"
+                                                pendingCardTitleFromAI = obj.optString("title").takeIf { it.isNotBlank() }
+                                                if (pendingBoardNameFromAI == null) {
+                                                    proceedToAskBoardName("Karte")
+                                                    state = ControllerState.AddCard_WaitingForBoardName
+                                                } else {
+                                                    // Board name provided by AI, attempt to use it
+                                                    getBestMatchingBoardId(trelloKey, trelloToken, pendingBoardNameFromAI!!,
+                                                        onResult = { boardId, matchedBoard ->
+                                                            if (boardId != null) {
+                                                                currentBoardId = boardId
+                                                                currentBoardName = matchedBoard
+                                                                if (pendingListNameFromAI == null) {
+                                                                    proceedToAskListNameForCard()
+                                                                    state = ControllerState.AddCard_WaitingForListName
+                                                                } else {
+                                                                    getBestMatchingListId(trelloKey, trelloToken, boardId, pendingListNameFromAI!!,
+                                                                        onResult = { listId, matchedList ->
+                                                                            if (listId != null) {
+                                                                                currentListId = listId
+                                                                                currentListName = matchedList
+                                                                                if (pendingCardTitleFromAI == null) {
+                                                                                    proceedToAskCardTitle()
+                                                                                    state = ControllerState.AddCard_WaitingForCardTitle
+                                                                                } else {
+                                                                                    currentCardTitle = pendingCardTitleFromAI
+                                                                                    val confirmMsg = "Ich werde eine neue Karte mit dem Titel '${currentCardTitle}' in der Liste '${currentListName}' im Board '${currentBoardName}' erstellen. Möchtest du das tun?"
+                                                                                    speakWithCallback(confirmMsg) { startSpeechInput("Ja oder Nein?") }
+                                                                                    state = ControllerState.AddCard_ConfirmCreation
+                                                                                }
+                                                                            } else { // List from AI not found
+                                                                                speakWithCallback("Die von der KI erkannte Liste '$pendingListNameFromAI' wurde nicht gefunden.") { proceedToAskListNameForCard() }
+                                                                                state = ControllerState.AddCard_WaitingForListName
                                                                             }
-                                                                        } else { // List from AI not found
-                                                                            speakWithCallback("Die von der KI erkannte Liste '$listFromAI' wurde nicht gefunden.") {
-                                                                                proceedToAskListName()
-                                                                            }
-                                                                            state = ControllerState.AddCard_WaitingForListName
-                                                                        }
-                                                                    },
-                                                                    onError = {speakWithCallback("Fehler bei Listensuche für '${listFromAI}'.") { proceedToAskListName()}; state = ControllerState.AddCard_WaitingForListName }
-                                                                )
+                                                                        },
+                                                                        onError = { speakWithCallback("Fehler bei Listensuche für '$pendingListNameFromAI'.") { proceedToAskListNameForCard() }; state = ControllerState.AddCard_WaitingForListName }
+                                                                    )
+                                                                }
+                                                            } else { // Board from AI not found
+                                                                speakWithCallback("Das von der KI erkannte Board '$pendingBoardNameFromAI' wurde nicht gefunden.") { proceedToAskBoardName("Karte") }
+                                                                state = ControllerState.AddCard_WaitingForBoardName
                                                             }
-                                                        } else { // Board from AI not found
-                                                            speakWithCallback("Das von der KI erkannte Board '$boardFromAI' wurde nicht gefunden.") {
-                                                                proceedToAskBoardName()
+                                                        },
+                                                        onError = { speakWithCallback("Fehler bei Boardsuche für '$pendingBoardNameFromAI'.") { proceedToAskBoardName("Karte") }; state = ControllerState.AddCard_WaitingForBoardName }
+                                                    )
+                                                }
+                                            }
+                                            "add_list" -> {
+                                                currentTrelloAction = "add_list"
+                                                pendingNewListNameFromAI = pendingListNameFromAI // AI's "list" field is the new list name here
+                                                if (pendingBoardNameFromAI == null) {
+                                                    proceedToAskBoardName("Liste")
+                                                    state = ControllerState.AddList_WaitingForBoardName
+                                                } else {
+                                                    // Board name provided by AI
+                                                    getBestMatchingBoardId(trelloKey, trelloToken, pendingBoardNameFromAI!!,
+                                                        onResult = { boardId, matchedBoard ->
+                                                            if (boardId != null) {
+                                                                currentBoardId = boardId
+                                                                currentBoardName = matchedBoard
+                                                                if (pendingNewListNameFromAI == null) {
+                                                                    proceedToAskNewListName()
+                                                                    state = ControllerState.AddList_WaitingForNewListName
+                                                                } else {
+                                                                    currentNewListName = pendingNewListNameFromAI
+                                                                    val confirmMsg = "Ich werde eine neue Liste mit dem Namen '${currentNewListName}' im Board '${currentBoardName}' erstellen. Ist das korrekt?"
+                                                                    speakWithCallback(confirmMsg) { startSpeechInput("Ja oder Nein?") }
+                                                                    state = ControllerState.AddList_ConfirmCreation
+                                                                }
+                                                            } else { // Board from AI not found
+                                                                speakWithCallback("Das von der KI erkannte Board '$pendingBoardNameFromAI' wurde nicht gefunden.") { proceedToAskBoardName("Liste") }
+                                                                state = ControllerState.AddList_WaitingForBoardName
                                                             }
-                                                            state = ControllerState.AddCard_WaitingForBoardName
-                                                        }
-                                                    },
-                                                    onError = { speakWithCallback("Fehler bei Boardsuche für '${boardFromAI}'.") { proceedToAskBoardName() }; state = ControllerState.AddCard_WaitingForBoardName }
-                                                )
+                                                        },
+                                                        onError = { speakWithCallback("Fehler bei Boardsuche für '$pendingBoardNameFromAI'.") { proceedToAskBoardName("Liste") }; state = ControllerState.AddList_WaitingForBoardName }
+                                                    )
+                                                }
                                             }
-                                        } else if (action.isNotBlank()) { // Other actions, use old flow
-                                            val confirmationText = buildConfirmationText(obj)
-                                            speakWithCallback(confirmationText) {
-                                                startSpeechInput("Bitte mit Ja oder Nein antworten")
+                                            // ... other actions that might have a multi-turn flow ...
+                                            else -> { // Fallback to old single-shot confirmation for other actions
+                                                if (action.isNotBlank()) {
+                                                    val confirmationText = buildUiConfirmationText(obj) // Use specific UI builder
+                                                    speakWithCallback(confirmationText) { startSpeechInput("Bitte mit Ja oder Nein antworten") }
+                                                    state = ControllerState.WaitingForConfirmation
+                                                } else {
+                                                    speakWithCallback("Ich habe die Aktion nicht verstanden. Bitte versuche es erneut.") { startSpeechInput("Was möchtest du tun?") }
+                                                }
                                             }
-                                            state = ControllerState.WaitingForConfirmation
-                                        } else {
-                                            speakWithCallback("Ich habe die Aktion nicht verstanden. Bitte versuche es erneut.") { startSpeechInput("Was möchtest du tun?") }
                                         }
                                     } catch (e: Exception) {
-                                        speakWithCallback("Fehler beim Verarbeiten der KI-Antwort.") { startSpeechInput("Was möchtest du tun?") }
+                                        speakWithCallback("Fehler beim Verarbeiten der KI-Antwort: ${e.message}") { startSpeechInput("Was möchtest du tun?") }
+                                        state = ControllerState.WaitingForInitialCommand
                                     }
                                 }
                             },
                             onError = { errorMsg ->
                                 runOnUiThread {
                                     speakWithCallback("Fehler bei der Anfrage an die KI: $errorMsg") { startSpeechInput("Was möchtest du tun?") }
+                                    state = ControllerState.WaitingForInitialCommand
                                 }
                             }
                         )
                     }
 
-                    ControllerState.AddCard_WaitingForBoardName -> {
+                    ControllerState.AddCard_WaitingForBoardName, ControllerState.AddList_WaitingForBoardName -> {
                         val boardNameInput = fixedSpoken
                         getBestMatchingBoardId(trelloKey, trelloToken, boardNameInput,
                             onResult = { boardId, matchedBoardName ->
                                 if (boardId != null) {
                                     currentBoardId = boardId
                                     currentBoardName = matchedBoardName
-                                    proceedToAskListName()
-                                    state = ControllerState.AddCard_WaitingForListName
+                                    if (currentTrelloAction == "add_card") {
+                                        proceedToAskListNameForCard()
+                                        state = ControllerState.AddCard_WaitingForListName
+                                    } else if (currentTrelloAction == "add_list") {
+                                        proceedToAskNewListName()
+                                        state = ControllerState.AddList_WaitingForNewListName
+                                    }
                                 } else {
                                     speakWithCallback("Das Board '$boardNameInput' wurde nicht gefunden. Soll ich dir mögliche Boards nennen?") {
                                         startSpeechInput("Ja oder Nein?")
                                     }
-                                    state = ControllerState.AddCard_ConfirmBoardNotFound
+                                    state = ControllerState.AddCard_ConfirmBoardNotFound // Generic "confirm board not found"
                                 }
                             },
-                            onError = {speakWithCallback("Fehler bei Boardsuche. Bitte erneut versuchen.") { proceedToAskBoardName() }; state = ControllerState.AddCard_WaitingForBoardName }
+                            onError = {
+                                speakWithCallback("Fehler bei Boardsuche. Bitte erneut versuchen.") {
+                                    if (currentTrelloAction == "add_card") proceedToAskBoardName("Karte") else proceedToAskBoardName("Liste")
+                                }
+                                state = if (currentTrelloAction == "add_card") ControllerState.AddCard_WaitingForBoardName else ControllerState.AddList_WaitingForBoardName
+                            }
                         )
                     }
-                    ControllerState.AddCard_ConfirmBoardNotFound -> {
+                    ControllerState.AddCard_ConfirmBoardNotFound -> { // Handles both add_card and add_list board not found
                         if (fixedSpoken.lowercase().contains("ja")) {
                             getAllBoards(trelloKey, trelloToken, { boards ->
                                 val boardNames = boards.map { it.first }
@@ -409,22 +475,35 @@ class MainActivity : ComponentActivity() {
                                 } else {
                                     speakWithCallback("Ich konnte keine Boards finden.")
                                 }
-                                state = ControllerState.AddCard_WaitingForBoardName
-                            }, onError = {speakWithCallback("Fehler beim Laden der Boards.") { proceedToAskBoardName() }; state = ControllerState.AddCard_WaitingForBoardName })
+                                // Return to the correct "waiting for board name" state based on current action
+                                state = if (currentTrelloAction == "add_card") ControllerState.AddCard_WaitingForBoardName else ControllerState.AddList_WaitingForBoardName
+                            }, onError = {
+                                speakWithCallback("Fehler beim Laden der Boards.") {
+                                     if (currentTrelloAction == "add_card") proceedToAskBoardName("Karte") else proceedToAskBoardName("Liste")
+                                }
+                                state = if (currentTrelloAction == "add_card") ControllerState.AddCard_WaitingForBoardName else ControllerState.AddList_WaitingForBoardName
+                            })
                         } else {
-                            speakWithCallback("Okay, Vorgang abgebrochen.") { resetCardCreationFlow(); state = ControllerState.WaitingForInitialCommand }
+                            speakWithCallback("Okay, Vorgang abgebrochen.") { resetMultiTurnFlow(); state = ControllerState.WaitingForInitialCommand }
                         }
                     }
 
-                    ControllerState.AddCard_WaitingForListName -> {
+                    ControllerState.AddCard_WaitingForListName -> { // Specific to add_card
                         val listNameInput = fixedSpoken
                         getBestMatchingListId(trelloKey, trelloToken, currentBoardId!!, listNameInput,
                             onResult = { listId, matchedListName ->
                                 if (listId != null) {
                                     currentListId = listId
                                     currentListName = matchedListName
-                                    proceedToAskCardTitle()
-                                    state = ControllerState.AddCard_WaitingForCardTitle
+                                    if (pendingCardTitleFromAI != null) { // If AI gave title initially
+                                        currentCardTitle = pendingCardTitleFromAI
+                                        val confirmMsg = "Ich werde eine neue Karte mit dem Titel '${currentCardTitle}' in der Liste '${currentListName}' im Board '${currentBoardName}' erstellen. Möchtest du das tun?"
+                                        speakWithCallback(confirmMsg) { startSpeechInput("Ja oder Nein?") }
+                                        state = ControllerState.AddCard_ConfirmCreation
+                                    } else {
+                                        proceedToAskCardTitle()
+                                        state = ControllerState.AddCard_WaitingForCardTitle
+                                    }
                                 } else {
                                     speakWithCallback("Die Liste '$listNameInput' wurde im Board '$currentBoardName' nicht gefunden. Soll ich dir mögliche Listen nennen?") {
                                         startSpeechInput("Ja oder Nein?")
@@ -432,10 +511,10 @@ class MainActivity : ComponentActivity() {
                                     state = ControllerState.AddCard_ConfirmListNotFound
                                 }
                             },
-                            onError = {speakWithCallback("Fehler bei Listensuche. Bitte erneut versuchen.") { proceedToAskListName() }; state = ControllerState.AddCard_WaitingForListName }
+                            onError = {speakWithCallback("Fehler bei Listensuche. Bitte erneut versuchen.") { proceedToAskListNameForCard() }; state = ControllerState.AddCard_WaitingForListName }
                         )
                     }
-                    ControllerState.AddCard_ConfirmListNotFound -> {
+                    ControllerState.AddCard_ConfirmListNotFound -> { // Specific to add_card
                         if (fixedSpoken.lowercase().contains("ja")) {
                             getAllLists(trelloKey, trelloToken, currentBoardId!!, { lists ->
                                 val listNames = lists.map { it.first }
@@ -446,91 +525,100 @@ class MainActivity : ComponentActivity() {
                                     speakWithCallback("Keine Listen im Board '$currentBoardName' gefunden.")
                                 }
                                 state = ControllerState.AddCard_WaitingForListName
-                            }, onError = {speakWithCallback("Fehler beim Laden der Listen.") { proceedToAskListName() }; state = ControllerState.AddCard_WaitingForListName })
+                            }, onError = {speakWithCallback("Fehler beim Laden der Listen.") { proceedToAskListNameForCard() }; state = ControllerState.AddCard_WaitingForListName })
                         } else {
-                            speakWithCallback("Okay, Vorgang abgebrochen.") { resetCardCreationFlow(); state = ControllerState.WaitingForInitialCommand }
+                            speakWithCallback("Okay, Vorgang abgebrochen.") { resetMultiTurnFlow(); state = ControllerState.WaitingForInitialCommand }
                         }
                     }
 
-                    ControllerState.AddCard_WaitingForCardTitle -> {
+                    ControllerState.AddCard_WaitingForCardTitle -> { // Specific to add_card
                         currentCardTitle = fixedSpoken
                         val confirmMsg = "Ich werde eine neue Karte mit dem Titel '${currentCardTitle}' in der Liste '${currentListName}' im Board '${currentBoardName}' erstellen. Möchtest du das tun?"
                         speakWithCallback(confirmMsg) { startSpeechInput("Ja oder Nein?") }
                         state = ControllerState.AddCard_ConfirmCreation
                     }
 
-                    ControllerState.AddCard_ConfirmCreation -> {
+                    ControllerState.AddCard_ConfirmCreation -> { // Specific to add_card
                         if (fixedSpoken.lowercase().contains("ja")) {
                             if (currentTrelloAction == "add_card" && currentListId != null && currentCardTitle != null) {
-                                // state = ControllerState.ExecutingAction // UI will show this via trelloResult
-                                addCardToTrello(trelloKey, trelloToken, currentListId!!, currentCardTitle!!, "", // desc is empty for now
+                                addCardToTrello(trelloKey, trelloToken, currentListId!!, currentCardTitle!!, "",
                                     onSuccess = {
                                         runOnUiThread {
                                             trelloResult = "Karte '${currentCardTitle}' in Liste '${currentListName}' im Board '${currentBoardName}' erstellt."
-                                            speakWithCallback(trelloResult)
-                                            resetCardCreationFlow()
-                                            state = ControllerState.Finished
+                                            speakWithCallback(trelloResult) { state = ControllerState.Finished }
                                         }
                                     },
-                                    onError = { errMsg ->
-                                        runOnUiThread {
-                                            trelloResult = "Fehler: $errMsg"
-                                            speakWithCallback(trelloResult)
-                                            resetCardCreationFlow()
-                                            state = ControllerState.WaitingForInitialCommand
-                                        }
-                                    }
+                                    onError = { errMsg -> runOnUiThread { trelloResult = "Fehler: $errMsg"; speakWithCallback(trelloResult) { state = ControllerState.WaitingForInitialCommand } } }
                                 )
-                            } else { /* Should not happen if logic is correct */ speakWithCallback("Interner Fehler."); resetCardCreationFlow(); state = ControllerState.WaitingForInitialCommand }
+                            } else { speakWithCallback("Interner Fehler bei Karten-Erstellung."); resetMultiTurnFlow(); state = ControllerState.WaitingForInitialCommand }
                         } else {
-                            speakWithCallback("Okay, Karte nicht erstellt.") { resetCardCreationFlow(); state = ControllerState.WaitingForInitialCommand }
+                            speakWithCallback("Okay, Karte nicht erstellt.") { resetMultiTurnFlow(); state = ControllerState.WaitingForInitialCommand }
                         }
                     }
 
-                    ControllerState.WaitingForConfirmation -> { // Handles other actions like add_list if AI provided full info
+                    // Add List Flow States
+                    ControllerState.AddList_WaitingForNewListName -> {
+                        currentNewListName = fixedSpoken
+                        val confirmMsg = "Ich werde eine neue Liste mit dem Namen '${currentNewListName}' im Board '${currentBoardName}' erstellen. Ist das korrekt?"
+                        speakWithCallback(confirmMsg) { startSpeechInput("Ja oder Nein?") }
+                        state = ControllerState.AddList_ConfirmCreation
+                    }
+
+                    ControllerState.AddList_ConfirmCreation -> {
                         if (fixedSpoken.lowercase().contains("ja")) {
-                            val obj = actionJsonForUi // Use the stored JSON from initial AI parse
+                            if (currentTrelloAction == "add_list" && currentBoardId != null && currentNewListName != null) {
+                                addListToBoard(trelloKey, trelloToken, currentBoardId!!, currentNewListName!!,
+                                    onSuccess = {
+                                        runOnUiThread {
+                                            trelloResult = "Liste '${currentNewListName}' im Board '${currentBoardName}' erstellt."
+                                            speakWithCallback(trelloResult) { state = ControllerState.Finished }
+                                        }
+                                    },
+                                    onError = { errMsg -> runOnUiThread { trelloResult = "Fehler: $errMsg"; speakWithCallback(trelloResult) { state = ControllerState.WaitingForInitialCommand } } }
+                                )
+                            } else { speakWithCallback("Interner Fehler bei Listen-Erstellung."); resetMultiTurnFlow(); state = ControllerState.WaitingForInitialCommand }
+                        } else {
+                            speakWithCallback("Okay, Liste nicht erstellt.") { resetMultiTurnFlow(); state = ControllerState.WaitingForInitialCommand }
+                        }
+                    }
+
+
+                    ControllerState.WaitingForConfirmation -> { // Handles other actions if AI provided full info (old flow)
+                        if (fixedSpoken.lowercase().contains("ja")) {
+                            val obj = actionJsonForUi
                             if (obj != null) {
                                 val action = obj.optString("action")
-                                // This is where you'd put the logic from the *original* WaitingForConfirmation state
-                                // For example, for "add_list":
-                                if (action == "add_list") {
-                                    val boardNameToMatch = obj.optString("board")
-                                    val listNameToAdd = obj.optString("list")
-                                    if (boardNameToMatch.isNotBlank() && listNameToAdd.isNotBlank()) {
-                                        getBestMatchingBoardId(trelloKey, trelloToken, boardNameToMatch,
-                                            onResult = { boardId, matchedBoard ->
-                                                if (boardId != null) {
-                                                    addListToBoard(trelloKey, trelloToken, boardId, listNameToAdd,
-                                                        onSuccess = { runOnUiThread { trelloResult = "Liste '$listNameToAdd' in Board '$matchedBoard' erstellt."; speakWithCallback(trelloResult); state = ControllerState.Finished } },
-                                                        onError = { errMsg -> runOnUiThread { trelloResult = "Fehler: $errMsg"; speakWithCallback(trelloResult); state = ControllerState.WaitingForInitialCommand } }
-                                                    )
-                                                } else { runOnUiThread { trelloResult = "Board '$boardNameToMatch' nicht gefunden."; speakWithCallback(trelloResult); state = ControllerState.WaitingForInitialCommand } }
-                                            },
-                                            onError = { errMsg -> runOnUiThread { trelloResult = "Fehler Boardsuche: $errMsg"; speakWithCallback(trelloResult); state = ControllerState.WaitingForInitialCommand } }
-                                        )
-                                    } else { runOnUiThread { trelloResult = "Board/Listenname fehlt."; speakWithCallback(trelloResult); state = ControllerState.WaitingForInitialCommand } }
+                                // This section is for actions NOT handled by multi-turn dialogs above
+                                // Example: if you had "delete_card" fully parsed by AI
+                                if (action != "add_card" && action != "add_list") {
+                                    // TODO: Implement execution for other single-shot confirmed actions
+                                    runOnUiThread { trelloResult = "Aktion '$action' (Einzelschritt) wird ausgeführt..."; speakWithCallback(trelloResult); state = ControllerState.Finished }
                                 } else {
-                                    runOnUiThread { trelloResult = "Aktion '$action' noch nicht vollständig im Dialog implementiert."; speakWithCallback(trelloResult); state = ControllerState.WaitingForInitialCommand }
+                                     runOnUiThread { trelloResult = "Aktion '$action' sollte im Dialog behandelt werden."; speakWithCallback(trelloResult); state = ControllerState.WaitingForInitialCommand }
                                 }
                             } else { runOnUiThread { trelloResult = "Keine Aktion zum Bestätigen."; speakWithCallback(trelloResult); state = ControllerState.WaitingForInitialCommand } }
                         } else {
                             speakWithCallback("Okay, Aktion abgebrochen.") { state = ControllerState.WaitingForInitialCommand }
                         }
-                        actionJsonForUi = null // Clear after use
+                        actionJsonForUi = null
                     }
 
                     ControllerState.Finished -> {
-                        spokenText = ""
-                        trelloResult = "" // Will be set by the successful action
-                        actionJsonForUi = null
-                        resetCardCreationFlow() // Ensure multi-turn states are cleared
-                        state = ControllerState.WaitingForInitialCommand
-                        // Optional: speak "Bereit für nächsten Befehl" after a short delay or directly allow new input.
+                        // SpokenText and TrelloResult are part of the UI and will be cleared on next initial command
+                        // actionJsonForUi is cleared
+                        // resetMultiTurnFlow() is called when transitioning TO WaitingForInitialCommand or from Finished to new command
+                        // The main loop will transition to WaitingForInitialCommand or user can click button
+                        // For now, let button click handle full reset to WaitingForInitialCommand
+                        // Or, after speakWithCallback in success handlers, set state = ControllerState.WaitingForInitialCommand
+                        // Let's ensure reset happens before next command
+                        resetMultiTurnFlow()
+                        // spokenText = "" // Already handled by UI logic or next command
+                        // trelloResult = "" // Already handled by UI logic or next command
+                        state = ControllerState.WaitingForInitialCommand // Ready for next command
+                        // Optionally, speak "Bereit für nächsten Befehl"
                     }
                     else -> {
-                        // Should not happen if all states are handled
-                        resetCardCreationFlow()
+                        resetMultiTurnFlow()
                         state = ControllerState.WaitingForInitialCommand
                     }
                 }
@@ -543,9 +631,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
+                        modifier = Modifier.fillMaxSize().padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Card(
@@ -559,30 +645,12 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Button(
                                     onClick = {
-                                        // If in a flow, the prompt for startSpeechInput is set by the flow logic.
-                                        // If idle, use a generic prompt.
-                                        val prompt = when (state) {
-                                            ControllerState.WaitingForInitialCommand -> "Was möchtest du tun?"
-                                            // Specific prompts are handled by speakWithCallback's onDone
-                                            else -> "Ich höre..." // Generic fallback, should be overridden by flow
-                                        }
-                                        if (state == ControllerState.WaitingForInitialCommand || state == ControllerState.Finished) {
-                                            // Reset UI fields for a fresh command
-                                            spokenText = ""
-                                            trelloResult = ""
-                                            actionJsonForUi = null
-                                            resetCardCreationFlow()
-                                            state = ControllerState.WaitingForInitialCommand
-                                            startSpeechInput(prompt)
-                                        } else {
-                                            // If in the middle of a flow, the speech input is usually triggered by speakWithCallback's onDone.
-                                            // This button click might interrupt or restart. For now, let it restart if clicked mid-flow.
-                                            // Or, better, let the current flow dictate the prompt if it's waiting for input.
-                                            // For simplicity, a general click here might just restart the initial command prompt.
-                                            resetCardCreationFlow()
-                                            state = ControllerState.WaitingForInitialCommand
-                                            startSpeechInput("Was möchtest du tun?")
-                                        }
+                                        resetMultiTurnFlow()
+                                        spokenText = ""
+                                        trelloResult = ""
+                                        actionJsonForUi = null
+                                        state = ControllerState.WaitingForInitialCommand
+                                        startSpeechInput("Was möchtest du tun?")
                                     },
                                     modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
                                 ) {
@@ -605,15 +673,18 @@ class MainActivity : ComponentActivity() {
                                 Text(spokenText, style = MaterialTheme.typography.bodyMedium)
                                 Spacer(Modifier.height(8.dp))
 
-                                // Display current multi-turn context or initial AI parse
                                 val currentActionInfo = StringBuilder()
-                                if (currentTrelloAction != null) {
-                                    currentActionInfo.append("Aktion: $currentTrelloAction")
+                                if (currentTrelloAction == "add_card") {
+                                    currentActionInfo.append("Aktion: Karte erstellen")
                                     if (currentBoardName != null) currentActionInfo.append("\nBoard: $currentBoardName")
-                                    if (currentListName != null) currentActionInfo.append("\nListe: $currentListName")
-                                    if (currentCardTitle != null) currentActionInfo.append("\nTitel: $currentCardTitle")
-                                } else if (actionJsonForUi != null) {
-                                    currentActionInfo.append(buildConfirmationText(actionJsonForUi!!))
+                                    if (currentListName != null) currentActionInfo.append("\nZielliste: $currentListName")
+                                    if (currentCardTitle != null) currentActionInfo.append("\nKartentitel: $currentCardTitle")
+                                } else if (currentTrelloAction == "add_list") {
+                                    currentActionInfo.append("Aktion: Liste erstellen")
+                                    if (currentBoardName != null) currentActionInfo.append("\nBoard: $currentBoardName")
+                                    if (currentNewListName != null) currentActionInfo.append("\nNeuer Listenname: $currentNewListName")
+                                } else if (actionJsonForUi != null) { // Fallback for single-shot AI results
+                                    currentActionInfo.append(buildUiConfirmationText(actionJsonForUi!!))
                                 }
 
                                 if (currentActionInfo.isNotBlank()) {
