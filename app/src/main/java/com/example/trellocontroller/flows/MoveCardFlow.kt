@@ -292,27 +292,40 @@ class MoveCardFlow(private val dependencies: MoveCardFlowDependencies) {
             dependencies.getAllBoards(
                 onResult = { boards ->
                     val boardNames = boards.map { it.first }
-                    val text = if (boardNames.isNotEmpty()) {
-                        "Mögliche Boards sind: ${boardNames.joinToString(", ", limit = 5)}. Welches Board meinst du?"
+                    val (text, nextStatePrompt) = if (isSourceBoard) {
+                        Pair(
+                            if (boardNames.isNotEmpty()) "Mögliche Quell-Boards sind: ${boardNames.joinToString(", ", limit = 5)}. Welches Board meinst du?"
+                            else "Ich konnte keine Boards finden. Bitte nenne ein Quell-Board.",
+                            "Bitte nenne das Quell-Board"
+                        )
                     } else {
-                        "Ich konnte keine Boards finden. Bitte nenne ein Board."
+                        Pair(
+                            if (boardNames.isNotEmpty()) "Mögliche Ziel-Boards sind: ${boardNames.joinToString(", ", limit = 5)}. Welches Board meinst du?"
+                            else "Ich konnte keine Boards finden. Bitte nenne ein Ziel-Board.",
+                            "Bitte nenne das Ziel-Board"
+                        )
                     }
                     dependencies.speakWithCallback(text) {
-                        dependencies.startSpeechInput(if (isSourceBoard) "Bitte nenne das Quell-Board" else "Bitte nenne das Ziel-Board")
+                        dependencies.startSpeechInput(nextStatePrompt)
                     }
                     currentState = if (isSourceBoard) State.WAITING_FOR_SOURCE_BOARD_NAME else State.WAITING_FOR_TARGET_BOARD_NAME
                 },
                 onError = {
-                    dependencies.speakWithCallback("Fehler beim Laden der Boards. Bitte nenne ein Board.") {
-                        dependencies.startSpeechInput(if (isSourceBoard) "Bitte nenne das Quell-Board" else "Bitte nenne das Ziel-Board")
+                    val errorPrompt = if (isSourceBoard) "Bitte nenne das Quell-Board" else "Bitte nenne das Ziel-Board"
+                    dependencies.speakWithCallback("Fehler beim Laden der Boards. $errorPrompt.") {
+                        dependencies.startSpeechInput(errorPrompt)
                     }
                     currentState = if (isSourceBoard) State.WAITING_FOR_SOURCE_BOARD_NAME else State.WAITING_FOR_TARGET_BOARD_NAME
                 }
             )
-        } else {
-            dependencies.speakWithCallback("Okay, Vorgang abgebrochen.") {
-                dependencies.onFlowComplete("Kartenverschiebung abgebrochen.", false)
-                resetState()
+        } else { // User said "Nein" to listing boards
+            val boardType = if (isSourceBoard) "Quell-Board" else "Ziel-Board"
+            val prompt = "Okay. Bitte wiederhole den Namen für das $boardType."
+            
+            currentState = if (isSourceBoard) State.WAITING_FOR_SOURCE_BOARD_NAME else State.WAITING_FOR_TARGET_BOARD_NAME
+            dependencies.updateUiContext(buildContextText()) // Update UI before speaking
+            dependencies.speakWithCallback(prompt) {
+                dependencies.startSpeechInput("Bitte nenne den Namen für das $boardType.")
             }
         }
     }
@@ -323,27 +336,40 @@ class MoveCardFlow(private val dependencies: MoveCardFlowDependencies) {
             dependencies.getAllLists(currentBoardId,
                 onResult = { lists ->
                     val listNames = lists.map { it.first }
-                    val text = if (listNames.isNotEmpty()) {
-                        "Mögliche Listen im Board '$boardNameForSuggestions' sind: ${listNames.joinToString(", ", limit = 5)}. Welche Liste meinst du?"
+                    val (text, nextStatePrompt) = if (isSourceList) {
+                        Pair(
+                            if (listNames.isNotEmpty()) "Mögliche Listen im Board '$boardNameForSuggestions' sind: ${listNames.joinToString(", ", limit = 5)}. Welche Liste meinst du?"
+                            else "Ich konnte keine Listen im Board '$boardNameForSuggestions' finden. Bitte nenne eine Quell-Liste.",
+                            "Bitte nenne die Quell-Liste"
+                        )
                     } else {
-                        "Ich konnte keine Listen im Board '$boardNameForSuggestions' finden. Bitte nenne eine Liste."
+                        Pair(
+                            if (listNames.isNotEmpty()) "Mögliche Listen im Board '$boardNameForSuggestions' sind: ${listNames.joinToString(", ", limit = 5)}. Welche Liste meinst du?"
+                            else "Ich konnte keine Listen im Board '$boardNameForSuggestions' finden. Bitte nenne eine Ziel-Liste.",
+                            "Bitte nenne die Ziel-Liste"
+                        )
                     }
                     dependencies.speakWithCallback(text) {
-                        dependencies.startSpeechInput(if (isSourceList) "Bitte nenne die Quell-Liste" else "Bitte nenne die Ziel-Liste")
+                        dependencies.startSpeechInput(nextStatePrompt)
                     }
                     currentState = if (isSourceList) State.WAITING_FOR_SOURCE_LIST_NAME else State.WAITING_FOR_TARGET_LIST_NAME
                 },
                 onError = {
-                    dependencies.speakWithCallback("Fehler beim Laden der Listen. Bitte nenne eine Liste.") {
-                         dependencies.startSpeechInput(if (isSourceList) "Bitte nenne die Quell-Liste" else "Bitte nenne die Ziel-Liste")
+                    val errorPrompt = if (isSourceList) "Bitte nenne die Quell-Liste" else "Bitte nenne die Ziel-Liste"
+                    dependencies.speakWithCallback("Fehler beim Laden der Listen. $errorPrompt.") {
+                         dependencies.startSpeechInput(errorPrompt)
                     }
                      currentState = if (isSourceList) State.WAITING_FOR_SOURCE_LIST_NAME else State.WAITING_FOR_TARGET_LIST_NAME
                 }
             )
-        } else {
-            dependencies.speakWithCallback("Okay, Vorgang abgebrochen.") {
-                dependencies.onFlowComplete("Kartenverschiebung abgebrochen.", false)
-                resetState()
+        } else { // User said "Nein" to listing lists
+            val listType = if (isSourceList) "Quell-Liste" else "Ziel-Liste"
+            val prompt = "Okay. Bitte wiederhole den Namen für die $listType."
+
+            currentState = if (isSourceList) State.WAITING_FOR_SOURCE_LIST_NAME else State.WAITING_FOR_TARGET_LIST_NAME
+            dependencies.updateUiContext(buildContextText()) // Update UI before speaking
+            dependencies.speakWithCallback(prompt) {
+                dependencies.startSpeechInput("Bitte nenne den Namen für die $listType.")
             }
         }
     }

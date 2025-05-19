@@ -1,7 +1,7 @@
 # TrelloController
 
 **TrelloController** ist eine Android-App, mit der du deine Trello-Boards per Sprache steuern kannst.  
-Die App nutzt moderne Sprach-zu-Text und KI-Technologie (Azure OpenAI), um Sprachbefehle zu verstehen und Trello-Operationen wie Karten anlegen, Listen verschieben oder Kommentare hinzufügen automatisch auszuführen.
+Die App nutzt moderne Sprach-zu-Text und KI-Technologie (Azure OpenAI), um Sprachbefehle zu verstehen und Trello-Operationen wie Karten anlegen, Karten verschieben, Listen erstellen, Karten umbenennen und Karten archivieren automatisch auszuführen.
 
 ---
 
@@ -11,9 +11,11 @@ Die App nutzt moderne Sprach-zu-Text und KI-Technologie (Azure OpenAI), um Sprac
 
 - **Fuzzy-Matching**: Toleriert kleine Versprecher, erkennt Boards/Listen auch bei ungenauer Aussprache
 
+- **Verbesserte Dialogführung**: Fragt bei unklaren Eingaben nach Wiederholung, bevor der Vorgang abbricht.
+
 - **Text-to-Speech**: Die App bestätigt Aktionen oder fragt nach, bevor sie sie ausführt
 
-- **Trello-Integration**: Fügt Karten hinzu, verschiebt sie, erstellt Listen etc.
+- **Trello-Integration**: Fügt Karten hinzu, verschiebt Karten, erstellt Listen, benennt Karten um, archiviert Karten.
 
 - **KI-Parsing**: Nutzt Azure OpenAI (GPT) zur Interpretation deiner Sprachbefehle
 

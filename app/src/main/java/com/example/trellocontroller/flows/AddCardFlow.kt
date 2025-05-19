@@ -157,16 +157,19 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
                     currentState = State.WAITING_FOR_BOARD_NAME
                 },
                 onError = {
-                    dependencies.speakWithCallback("Fehler beim Laden der Boards. Bitte nenne ein Board.") {
-                        dependencies.startSpeechInput("Bitte nenne das Board")
+                    val errorPrompt = "Bitte nenne das Board"
+                    dependencies.speakWithCallback("Fehler beim Laden der Boards. $errorPrompt.") {
+                        dependencies.startSpeechInput(errorPrompt)
                     }
                     currentState = State.WAITING_FOR_BOARD_NAME
                 }
             )
-        } else {
-            dependencies.speakWithCallback("Okay, Vorgang abgebrochen.") {
-                dependencies.onFlowComplete("Karten-Erstellung abgebrochen.", false)
-                resetState()
+        } else { // User said "Nein" to listing boards
+            val prompt = "Okay. Bitte wiederhole den Namen für das Board."
+            currentState = State.WAITING_FOR_BOARD_NAME
+            dependencies.updateUiContext(buildContextText())
+            dependencies.speakWithCallback(prompt) {
+                dependencies.startSpeechInput("Bitte nenne den Namen für das Board.")
             }
         }
     }
@@ -220,16 +223,19 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
                     currentState = State.WAITING_FOR_LIST_NAME
                 },
                 onError = {
-                    dependencies.speakWithCallback("Fehler beim Laden der Listen. Bitte nenne eine Liste.") {
-                        dependencies.startSpeechInput("Bitte nenne die Liste")
+                    val errorPrompt = "Bitte nenne die Liste"
+                    dependencies.speakWithCallback("Fehler beim Laden der Listen. $errorPrompt.") {
+                        dependencies.startSpeechInput(errorPrompt)
                     }
                     currentState = State.WAITING_FOR_LIST_NAME
                 }
             )
-        } else {
-            dependencies.speakWithCallback("Okay, Vorgang abgebrochen.") {
-                dependencies.onFlowComplete("Karten-Erstellung abgebrochen.", false)
-                resetState()
+        } else { // User said "Nein" to listing lists
+            val prompt = "Okay. Bitte wiederhole den Namen für die Liste."
+            currentState = State.WAITING_FOR_LIST_NAME
+            dependencies.updateUiContext(buildContextText())
+            dependencies.speakWithCallback(prompt) {
+                dependencies.startSpeechInput("Bitte nenne den Namen für die Liste.")
             }
         }
     }
