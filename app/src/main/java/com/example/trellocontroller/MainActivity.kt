@@ -24,6 +24,8 @@ import com.example.trellocontroller.flows.AddCardFlow
 import com.example.trellocontroller.flows.AddCardFlowDependencies
 import com.example.trellocontroller.flows.AddListFlow
 import com.example.trellocontroller.flows.AddListFlowDependencies
+import com.example.trellocontroller.flows.RenameCardFlow // Added
+import com.example.trellocontroller.flows.RenameCardFlowDependencies // Added
 import org.json.JSONObject
 import java.util.*
 
@@ -32,10 +34,8 @@ enum class ControllerState {
     WaitingForInitialCommand,
 
     // AddList Flow States werden durch AddListFlow.kt gehandhabt
-    // AddList_WaitingForBoardName,
-    // AddList_ConfirmBoardNotFound,
-    // AddList_WaitingForNewListName,
-    // AddList_ConfirmCreation,
+    // AddCard Flow States werden durch AddCardFlow.kt gehandhabt
+    // RenameCard Flow States werden durch RenameCardFlow.kt gehandhabt
 
     // General states
     WaitingForConfirmation, // Für Single-Shot Aktionen, die nicht in Flows sind
@@ -56,7 +56,8 @@ class MainActivity : ComponentActivity() {
 
     // Flow Controller Instanzen
     private lateinit var addCardFlow: AddCardFlow
-    private lateinit var addListFlow: AddListFlow // Neu
+    private lateinit var addListFlow: AddListFlow
+    private lateinit var renameCardFlow: RenameCardFlow // Added
 
     // Trello API Keys (aus BuildConfig)
     private val trelloKey: String by lazy { BuildConfig.TRELLO_API_KEY }
@@ -71,14 +72,16 @@ class MainActivity : ComponentActivity() {
 
     // Temporäre Zustandsvariablen für Multi-Turn-Interaktionen (hauptsächlich für AddList, bis refaktorisiert)
     private var currentTrelloAction by mutableStateOf<String?>(null)
-    private var currentBoardId by mutableStateOf<String?>(null)
-    private var currentBoardName by mutableStateOf<String?>(null)
-    private var currentListId by mutableStateOf<String?>(null)
-    private var currentListName by mutableStateOf<String?>(null)
+    // These are now managed by individual flows or are not needed globally:
+    // private var currentBoardId by mutableStateOf<String?>(null)
+    // private var currentBoardName by mutableStateOf<String?>(null)
+    // private var currentListId by mutableStateOf<String?>(null)
+    // private var currentListName by mutableStateOf<String?>(null)
 
     // Von AI extrahierte, aber noch nicht bestätigte/verwendete Werte (hauptsächlich für AddList)
-    private var pendingBoardNameFromAI by mutableStateOf<String?>(null)
-    private var pendingListNameFromAI by mutableStateOf<String?>(null)
+    // These are now managed by individual flows:
+    // private var pendingBoardNameFromAI by mutableStateOf<String?>(null)
+    // private var pendingListNameFromAI by mutableStateOf<String?>(null)
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -212,6 +215,62 @@ class MainActivity : ComponentActivity() {
         }
         addListFlow = AddListFlow(addListFlowDependenciesImpl)
 
+        // Initialisiere RenameCardFlow mit Abhängigkeiten
+        val renameCardFlowDependenciesImpl = object : RenameCardFlowDependencies {
+            override val trelloKey: String get() = this@MainActivity.trelloKey
+            override val trelloToken: String get() = this@MainActivity.trelloToken
+
+            override fun speakWithCallback(text: String, onDone: (() -> Unit)?) {
+                this@MainActivity.speakWithCallback(text, onDone)
+            }
+
+            override fun startSpeechInput(prompt: String) {
+                this@MainActivity.startSpeechInput(prompt)
+            }
+
+            override fun getBestMatchingBoardId(boardName: String, onResult: (boardId: String?, matchedBoardName: String?) -> Unit, onError: (String) -> Unit) {
+                this@MainActivity.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
+            }
+
+            override fun getAllBoards(onResult: (List<Pair<String, String>>) -> Unit, onError: (String) -> Unit) {
+                com.example.trellocontroller.getAllBoards(trelloKey, trelloToken, onResult, onError)
+            }
+
+            override fun getBestMatchingListId(boardId: String, listName: String, onResult: (listId: String?, matchedListName: String?) -> Unit, onError: (String) -> Unit) {
+                this@MainActivity.getBestMatchingListId(trelloKey, trelloToken, boardId, listName, onResult, onError)
+            }
+
+            override fun getAllLists(boardId: String, onResult: (List<Pair<String, String>>) -> Unit, onError: (String) -> Unit) {
+                com.example.trellocontroller.getAllLists(trelloKey, trelloToken, boardId, onResult, onError)
+            }
+
+            override fun getCardsFromList(listId: String, onResult: (List<Pair<String, String>>) -> Unit, onError: (String) -> Unit) {
+                com.example.trellocontroller.getCardsFromList(trelloKey, trelloToken, listId, onResult, onError)
+            }
+
+            override fun renameCardOnTrello(cardId: String, newName: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+                com.example.trellocontroller.renameCardOnTrello(trelloKey, trelloToken, cardId, newName, onSuccess, onError)
+            }
+
+            override fun onFlowComplete(message: String, success: Boolean) {
+                runOnUiThread {
+                    trelloResult = message
+                    currentFlowContextText = ""
+                    speakWithCallback(message) {
+                        currentGlobalState = ControllerState.WaitingForInitialCommand
+                    }
+                }
+            }
+
+            override fun updateUiContext(context: String) {
+                runOnUiThread {
+                    currentFlowContextText = context
+                }
+            }
+        }
+        renameCardFlow = RenameCardFlow(renameCardFlowDependenciesImpl)
+
+
         textToSpeech = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 textToSpeech.language = Locale.GERMAN
@@ -240,6 +299,8 @@ class MainActivity : ComponentActivity() {
                     addCardFlow.handleSpokenInput(fixedSpoken) // Übergabe der normalisierten Eingabe
                 } else if (::addListFlow.isInitialized && addListFlow.isActive()) { // Prüfe Initialisierung
                     addListFlow.handleSpokenInput(fixedSpoken)
+                } else if (::renameCardFlow.isInitialized && renameCardFlow.isActive()) { // Added
+                    renameCardFlow.handleSpokenInput(fixedSpoken)
                 } else {
                     handleGeneralSpokenInput(fixedSpoken)
                 }
@@ -251,6 +312,10 @@ class MainActivity : ComponentActivity() {
                     }
                 } else if (::addListFlow.isInitialized && addListFlow.isActive()) {
                      speakWithCallback("Spracheingabe fehlgeschlagen. Bitte erneut versuchen oder 'Abbrechen' sagen.") {
+                        // Flow könnte hier seine letzte Frage wiederholen
+                    }
+                } else if (::renameCardFlow.isInitialized && renameCardFlow.isActive()) { // Added
+                    speakWithCallback("Spracheingabe fehlgeschlagen. Bitte erneut versuchen oder 'Abbrechen' sagen.") {
                         // Flow könnte hier seine letzte Frage wiederholen
                     }
                 } else {
@@ -295,6 +360,9 @@ class MainActivity : ComponentActivity() {
                                  } else if (action == "add_list") {
                                      currentGlobalState = ControllerState.ExecutingAction
                                      addListFlow.start(obj) // Starte den AddListFlow
+                                 } else if (action == "rename_card") { // Added
+                                     currentGlobalState = ControllerState.ExecutingAction
+                                     renameCardFlow.start(obj)
                                  } else {
                                      // Fallback für andere Aktionen (Single-Shot-Flow)
                                      actionJsonForUi = obj
@@ -336,6 +404,7 @@ class MainActivity : ComponentActivity() {
     private fun resetAllStates() {
         if (::addCardFlow.isInitialized && addCardFlow.isActive()) addCardFlow.resetState()
         if (::addListFlow.isInitialized && addListFlow.isActive()) addListFlow.resetState() // Neu
+        if (::renameCardFlow.isInitialized && renameCardFlow.isActive()) renameCardFlow.resetState() // Added
         resetMultiTurnStateVariables()
         spokenText = ""
         trelloResult = ""
@@ -400,9 +469,11 @@ class MainActivity : ComponentActivity() {
         val board = json.optString("board", "")
         val list = json.optString("list", "")
         val title = json.optString("title", "")
+        // val newTitle = json.optString("new_title", "") // If AI provides it for rename_card
         return when (action) {
             "add_card" -> "Soll Karte '$title' zu Liste '$list' auf Board '$board' hinzugefügt werden?" // Wird jetzt vom Flow gehandhabt
-            "add_list" -> "Soll Liste '$list' zu Board '$board' hinzugefügt werden?"
+            "add_list" -> "Soll Liste '$list' zu Board '$board' hinzugefügt werden?" // Wird jetzt vom Flow gehandhabt
+            "rename_card" -> "Soll Karte '$title' umbenannt werden? (Details folgen im Dialog)" // Wird jetzt vom Flow gehandhabt
             else -> "Aktion: $action, Details: ${json.toString(2)}"
         }
     }
@@ -470,7 +541,7 @@ class MainActivity : ComponentActivity() {
                         if (::textToSpeech.isInitialized && textToSpeech.isSpeaking) {
                             textToSpeech.stop()
                         }
-                        resetAllStates() // Ruft auch addListFlow.resetState() auf
+                        resetAllStates() // Ruft auch addListFlow.resetState() und renameCardFlow.resetState() auf
                         startSpeechInput("Was möchtest du tun?")
                     },
                     modifier = Modifier.fillMaxWidth().height(70.dp)

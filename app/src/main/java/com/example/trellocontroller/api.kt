@@ -390,3 +390,82 @@ fun getAllLists(
         }
     })
 }
+
+fun renameCardOnTrello(
+    key: String,
+    token: String,
+    cardId: String,
+    newName: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val url = "https://api.trello.com/1/cards/$cardId"
+    val formBody = FormBody.Builder()
+        .add("key", key)
+        .add("token", token)
+        .add("name", newName)
+        .build()
+    val request = Request.Builder()
+        .url(url)
+        .put(formBody)
+        .build()
+
+    OkHttpClient().newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            onError(e.message ?: "API call failed")
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            if (response.isSuccessful) {
+                onSuccess()
+            } else {
+                val errorBody = response.body?.string()
+                onError("Error ${response.code}: $errorBody")
+            }
+            response.close()
+        }
+    })
+}
+
+fun getCardsFromList(
+    key: String,
+    token: String,
+    listId: String,
+    onResult: (List<Pair<String, String>>) -> Unit, // List of (CardName, CardId)
+    onError: (String) -> Unit
+) {
+    val url = "https://api.trello.com/1/lists/$listId/cards?key=$key&token=$token&fields=name,id"
+    val request = Request.Builder().url(url).build()
+
+    OkHttpClient().newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            onError(e.message ?: "API call failed")
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            if (!response.isSuccessful) {
+                onError("Error ${response.code}: ${response.body?.string()}")
+                response.close()
+                return
+            }
+            val body = response.body?.string()
+            if (body == null) {
+                onError("Empty response body")
+                response.close()
+                return
+            }
+            try {
+                val cardsArray = JSONArray(body)
+                val resultList = mutableListOf<Pair<String, String>>()
+                for (i in 0 until cardsArray.length()) {
+                    val cardObject = cardsArray.getJSONObject(i)
+                    resultList.add(Pair(cardObject.getString("name"), cardObject.getString("id")))
+                }
+                onResult(resultList)
+            } catch (e: Exception) {
+                onError("Error parsing cards: ${e.message}")
+            }
+            response.close()
+        }
+    })
+}
