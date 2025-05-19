@@ -22,8 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.trellocontroller.flows.AddCardFlow
 import com.example.trellocontroller.flows.AddCardFlowDependencies
-// Importiere Typography explizit, falls es in einer separaten Datei liegt, ansonsten ist es hier definiert
-// import com.example.trellocontroller.ui.theme.Typography // Beispielhafter Pfad
+import com.example.trellocontroller.flows.AddListFlow
+import com.example.trellocontroller.flows.AddListFlowDependencies
 import org.json.JSONObject
 import java.util.*
 
@@ -31,11 +31,11 @@ import java.util.*
 enum class ControllerState {
     WaitingForInitialCommand,
 
-    // AddList Flow States (bleiben vorerst, bis AddListFlow implementiert ist)
-    AddList_WaitingForBoardName,
-    AddList_ConfirmBoardNotFound,
-    AddList_WaitingForNewListName,
-    AddList_ConfirmCreation,
+    // AddList Flow States werden durch AddListFlow.kt gehandhabt
+    // AddList_WaitingForBoardName,
+    // AddList_ConfirmBoardNotFound,
+    // AddList_WaitingForNewListName,
+    // AddList_ConfirmCreation,
 
     // General states
     WaitingForConfirmation, // Für Single-Shot Aktionen, die nicht in Flows sind
@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
 
     // Flow Controller Instanzen
     private lateinit var addCardFlow: AddCardFlow
-    // private lateinit var addListFlow: AddListFlow // Beispiel für zukünftige Flows
+    private lateinit var addListFlow: AddListFlow // Neu
 
     // Trello API Keys (aus BuildConfig)
     private val trelloKey: String by lazy { BuildConfig.TRELLO_API_KEY }
@@ -75,17 +75,16 @@ class MainActivity : ComponentActivity() {
     private var currentBoardName by mutableStateOf<String?>(null)
     private var currentListId by mutableStateOf<String?>(null)
     private var currentListName by mutableStateOf<String?>(null)
-    private var currentNewListName by mutableStateOf<String?>(null) // Spezifisch für AddList
 
     // Von AI extrahierte, aber noch nicht bestätigte/verwendete Werte (hauptsächlich für AddList)
     private var pendingBoardNameFromAI by mutableStateOf<String?>(null)
     private var pendingListNameFromAI by mutableStateOf<String?>(null)
-    private var pendingNewListNameFromAI by mutableStateOf<String?>(null)
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialisiere AddCardFlow mit Abhängigkeiten (wie zuvor)
         val addCardFlowDependenciesImpl = object : AddCardFlowDependencies {
             override val trelloKey: String get() = this@MainActivity.trelloKey
             override val trelloToken: String get() = this@MainActivity.trelloToken
@@ -99,7 +98,7 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun getBestMatchingBoardId(
-                boardName: String, // Dies ist die normalisierte Eingabe vom AddCardFlow
+                boardName: String,
                 onResult: (boardId: String?, matchedBoardName: String?) -> Unit,
                 onError: (String) -> Unit
             ) {
@@ -158,6 +157,61 @@ class MainActivity : ComponentActivity() {
         }
         addCardFlow = AddCardFlow(addCardFlowDependenciesImpl)
 
+        // Initialisiere AddListFlow mit Abhängigkeiten
+        val addListFlowDependenciesImpl = object : AddListFlowDependencies {
+            override val trelloKey: String get() = this@MainActivity.trelloKey
+            override val trelloToken: String get() = this@MainActivity.trelloToken
+
+            override fun speakWithCallback(text: String, onDone: (() -> Unit)?) {
+                this@MainActivity.speakWithCallback(text, onDone)
+            }
+
+            override fun startSpeechInput(prompt: String) {
+                this@MainActivity.startSpeechInput(prompt)
+            }
+
+            override fun getBestMatchingBoardId(
+                boardName: String,
+                onResult: (boardId: String?, matchedBoardName: String?) -> Unit,
+                onError: (String) -> Unit
+            ) {
+                this@MainActivity.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
+            }
+
+            override fun getAllBoards(
+                onResult: (List<Pair<String, String>>) -> Unit,
+                onError: (String) -> Unit
+            ) {
+                com.example.trellocontroller.getAllBoards(trelloKey, trelloToken, onResult, onError)
+            }
+
+            override fun addListToTrello(
+                boardId: String,
+                listName: String,
+                onSuccess: () -> Unit,
+                onError: (String) -> Unit
+            ) {
+                com.example.trellocontroller.addListToBoard(trelloKey, trelloToken, boardId, listName, onSuccess, onError)
+            }
+
+            override fun onFlowComplete(message: String, success: Boolean) {
+                runOnUiThread {
+                    trelloResult = message
+                    currentFlowContextText = "" // Flow-Kontext leeren
+                    speakWithCallback(message) {
+                        currentGlobalState = ControllerState.WaitingForInitialCommand
+                    }
+                }
+            }
+
+            override fun updateUiContext(context: String) {
+                runOnUiThread {
+                    currentFlowContextText = context
+                }
+            }
+        }
+        addListFlow = AddListFlow(addListFlowDependenciesImpl)
+
         textToSpeech = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 textToSpeech.language = Locale.GERMAN
@@ -184,12 +238,19 @@ class MainActivity : ComponentActivity() {
 
                 if (addCardFlow.isActive()) {
                     addCardFlow.handleSpokenInput(fixedSpoken) // Übergabe der normalisierten Eingabe
+                } else if (::addListFlow.isInitialized && addListFlow.isActive()) { // Prüfe Initialisierung
+                    addListFlow.handleSpokenInput(fixedSpoken)
                 } else {
                     handleGeneralSpokenInput(fixedSpoken)
                 }
             } else {
+                // Spracheingabe fehlgeschlagen oder abgebrochen
                 if (addCardFlow.isActive()) {
                     speakWithCallback("Spracheingabe fehlgeschlagen. Bitte erneut versuchen oder 'Abbrechen' sagen.") {
+                        // Flow könnte hier seine letzte Frage wiederholen
+                    }
+                } else if (::addListFlow.isInitialized && addListFlow.isActive()) {
+                     speakWithCallback("Spracheingabe fehlgeschlagen. Bitte erneut versuchen oder 'Abbrechen' sagen.") {
                         // Flow könnte hier seine letzte Frage wiederholen
                     }
                 } else {
@@ -212,112 +273,69 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleGeneralSpokenInput(input: String) {
-        when (currentGlobalState) {
-            ControllerState.WaitingForInitialCommand -> {
-                actionJsonForUi = null
-                resetMultiTurnStateVariables()
+         when (currentGlobalState) {
+             ControllerState.WaitingForInitialCommand -> {
+                 actionJsonForUi = null
+                 resetMultiTurnStateVariables() // Globale Variablen zurücksetzen, die nicht von Flows verwaltet werden
 
-                val prompt = buildTrelloPrompt(input) // userMessage ist jetzt 'input'
+                 val prompt = buildTrelloPrompt(input)
 
-                askAzureOpenAI(
-                    prompt, azureApiKey, azureEndpoint, azureDeploymentName, azureApiVersion, // Korrigiert
-                    onResult = { aiResultString ->
-                        runOnUiThread {
-                            try {
-                                val obj = JSONObject(aiResultString)
-                                val action = obj.optString("action")
-                                currentTrelloAction = action
+                 askAzureOpenAI(
+                     prompt, azureApiKey, azureEndpoint, azureDeploymentName, azureApiVersion,
+                     onResult = { aiResultString ->
+                         runOnUiThread {
+                             try {
+                                 val obj = JSONObject(aiResultString)
+                                 val action = obj.optString("action")
+                                 currentTrelloAction = action // Kann für Single-Shot Aktionen nützlich sein
 
-                                if (action == "add_card") {
-                                    currentGlobalState = ControllerState.ExecutingAction
-                                    addCardFlow.start(obj)
-                                } else if (action == "add_list") {
-                                    pendingBoardNameFromAI = obj.optString("board").takeIf { it.isNotBlank() }
-                                    pendingNewListNameFromAI = obj.optString("list").takeIf { it.isNotBlank() }
-
-                                    if (pendingBoardNameFromAI != null) {
-                                        proceedToAskBoardName(pendingBoardNameFromAI!!, forListCreation = true)
-                                    } else {
-                                        speakWithCallback("In welchem Board soll die neue Liste erstellt werden?") {
-                                            startSpeechInput("Bitte nenne das Board für die neue Liste")
-                                        }
-                                        currentGlobalState = ControllerState.AddList_WaitingForBoardName
-                                    }
-                                } else {
-                                    actionJsonForUi = obj
-                                    if (action.isNotBlank()) {
-                                        val confirmationText = buildUiConfirmationText(obj)
-                                        speakWithCallback(confirmationText) { startSpeechInput("Bitte mit Ja oder Nein antworten") }
-                                        currentGlobalState = ControllerState.WaitingForConfirmation
-                                    } else {
-                                        speakWithCallback("Ich habe die Aktion nicht verstanden.") { startSpeechInput("Was möchtest du tun?") }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                trelloResult = "Fehler beim Verarbeiten der KI-Antwort: ${e.message}"
-                                speakWithCallback(trelloResult) { currentGlobalState = ControllerState.WaitingForInitialCommand }
-                            }
-                        }
-                    },
-                    onError = { errorMsg ->
-                        runOnUiThread {
-                            trelloResult = "Fehler bei der Anfrage an die KI: $errorMsg"
-                            speakWithCallback(trelloResult) { currentGlobalState = ControllerState.WaitingForInitialCommand }
-                        }
-                    }
-                )
-            }
-            ControllerState.AddList_WaitingForBoardName -> handleAddListBoardName(input)
-            ControllerState.AddList_ConfirmBoardNotFound -> handleAddListConfirmBoardNotFound(input)
-            ControllerState.AddList_WaitingForNewListName -> handleAddListNewListName(input)
-            ControllerState.AddList_ConfirmCreation -> handleAddListConfirmCreation(input)
-            ControllerState.WaitingForConfirmation -> handleSingleShotConfirmation(input)
-            ControllerState.ExecutingAction -> { /* Warten bis Flow fertig oder anderer Zustand gesetzt wird */ }
-            ControllerState.Finished -> {
-                resetAllStates()
-            }
-        }
-    }
-
-    private val utteranceCallbacks = mutableMapOf<String, (() -> Unit)?>()
-    private fun speakWithCallback(text: String, onDone: (() -> Unit)? = null) {
-        val utteranceId = UUID.randomUUID().toString()
-        utteranceCallbacks[utteranceId] = onDone
-        textToSpeech.speak(text, TextToSpeech.QUEUE_ADD, null, utteranceId)
-    }
-
-    private fun startSpeechInput(prompt: String = "Ich höre...") {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
-        }
-        try {
-            speechLauncher.launch(intent)
-        } catch (e: Exception) {
-            trelloResult = "Spracherkennung nicht verfügbar: ${e.message}"
-            speakWithCallback(trelloResult)
-        }
-    }
-
-    private fun normalizeSpeechCommand(command: String): String {
-        return command.lowercase(Locale.GERMAN).trim()
+                                 if (action == "add_card") {
+                                     currentGlobalState = ControllerState.ExecutingAction
+                                     addCardFlow.start(obj)
+                                 } else if (action == "add_list") {
+                                     currentGlobalState = ControllerState.ExecutingAction
+                                     addListFlow.start(obj) // Starte den AddListFlow
+                                 } else {
+                                     // Fallback für andere Aktionen (Single-Shot-Flow)
+                                     actionJsonForUi = obj
+                                     if (action.isNotBlank()) {
+                                         val confirmationText = buildUiConfirmationText(obj)
+                                         speakWithCallback(confirmationText) { startSpeechInput("Bitte mit Ja oder Nein antworten") }
+                                         currentGlobalState = ControllerState.WaitingForConfirmation
+                                     } else {
+                                         speakWithCallback("Ich habe die Aktion nicht verstanden.") { startSpeechInput("Was möchtest du tun?") }
+                                     }
+                                 }
+                             } catch (e: Exception) {
+                                 trelloResult = "Fehler beim Verarbeiten der KI-Antwort: ${e.message}"
+                                 speakWithCallback(trelloResult) { currentGlobalState = ControllerState.WaitingForInitialCommand }
+                             }
+                         }
+                     },
+                     onError = { errorMsg ->
+                         runOnUiThread {
+                             trelloResult = "Fehler bei der Anfrage an die KI: $errorMsg"
+                             speakWithCallback(trelloResult) { currentGlobalState = ControllerState.WaitingForInitialCommand }
+                         }
+                     }
+                 )
+             }
+             ControllerState.WaitingForConfirmation -> handleSingleShotConfirmation(input)
+             ControllerState.ExecutingAction -> { /* Warten bis Flow fertig oder anderer Zustand gesetzt wird */ }
+             ControllerState.Finished -> {
+                 resetAllStates() // Stellt sicher, dass alles zurückgesetzt wird
+             }
+         }
     }
 
     private fun resetMultiTurnStateVariables() {
+        // Nur noch Variablen zurücksetzen, die NICHT von den Flow-Klassen verwaltet werden.
         currentTrelloAction = null
-        currentBoardId = null
-        currentBoardName = null
-        currentListId = null
-        currentListName = null
-        currentNewListName = null
-        pendingBoardNameFromAI = null
-        pendingListNameFromAI = null
-        pendingNewListNameFromAI = null
     }
 
     private fun resetAllStates() {
         if (::addCardFlow.isInitialized && addCardFlow.isActive()) addCardFlow.resetState()
+        if (::addListFlow.isInitialized && addListFlow.isActive()) addListFlow.resetState() // Neu
         resetMultiTurnStateVariables()
         spokenText = ""
         trelloResult = ""
@@ -389,102 +407,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun proceedToAskBoardName(boardName: String, forListCreation: Boolean = false) {
-        getBestMatchingBoardId(trelloKey, trelloToken, boardName,
-            onResult = { boardId, matchedBoardName ->
-                if (boardId != null) {
-                    currentBoardId = boardId
-                    currentBoardName = matchedBoardName
-                    if (forListCreation) {
-                        if (pendingNewListNameFromAI != null) {
-                            currentNewListName = pendingNewListNameFromAI
-                            pendingNewListNameFromAI = null
-                            speakWithCallback("Okay, im Board '$currentBoardName'. Die neue Liste soll '$currentNewListName' heißen. Ist das richtig?") {
-                                startSpeechInput("Ja oder Nein?")
-                            }
-                            currentGlobalState = ControllerState.AddList_ConfirmCreation
-                        } else {
-                            speakWithCallback("Okay, im Board '$currentBoardName'. Wie soll die neue Liste heißen?") {
-                                startSpeechInput("Bitte nenne den Namen der neuen Liste")
-                            }
-                            currentGlobalState = ControllerState.AddList_WaitingForNewListName
-                        }
-                    }
-                } else {
-                    speakWithCallback("Das Board '$boardName' wurde nicht gefunden. Soll ich dir mögliche Boards nennen?") {
-                        startSpeechInput("Ja oder Nein?")
-                    }
-                    currentGlobalState = if (forListCreation) ControllerState.AddList_ConfirmBoardNotFound else ControllerState.WaitingForInitialCommand
-                }
-            },
-            onError = { error ->
-                speakWithCallback("Fehler bei der Boardsuche: $error. Bitte erneut versuchen.") {
-                    startSpeechInput("Bitte nenne das Board")
-                }
-                currentGlobalState = if (forListCreation) ControllerState.AddList_WaitingForBoardName else ControllerState.WaitingForInitialCommand
-            }
-        )
+    private fun speakWithCallback(text: String, onDone: (() -> Unit)? = null) {
+        val utteranceId = UUID.randomUUID().toString()
+        utteranceCallbacks[utteranceId] = onDone
+        textToSpeech.speak(text, TextToSpeech.QUEUE_ADD, null, utteranceId)
     }
 
-    private fun handleAddListBoardName(spokenBoardName: String) {
-        proceedToAskBoardName(spokenBoardName, forListCreation = true)
-    }
-
-    private fun handleAddListConfirmBoardNotFound(confirmation: String) {
-        if (confirmation.contains("ja")) {
-            com.example.trellocontroller.getAllBoards(trelloKey, trelloToken,
-                onResult = { boards ->
-                    val boardNames = boards.map { it.first }
-                    val text = if (boardNames.isNotEmpty()) {
-                        "Mögliche Boards sind: ${boardNames.joinToString(", ", limit = 5)}. In welchem Board soll die Liste erstellt werden?"
-                    } else {
-                        "Ich konnte keine Boards finden. Bitte nenne ein Board."
-                    }
-                    speakWithCallback(text) { startSpeechInput("Bitte nenne das Board") }
-                    currentGlobalState = ControllerState.AddList_WaitingForBoardName
-                },
-                onError = {
-                    speakWithCallback("Fehler beim Laden der Boards. Bitte nenne ein Board.") {
-                        startSpeechInput("Bitte nenne das Board")
-                    }
-                    currentGlobalState = ControllerState.AddList_WaitingForBoardName
-                }
-            )
-        } else {
-            speakWithCallback("Okay, Vorgang abgebrochen.") { resetAllStates() }
+    private fun startSpeechInput(prompt: String = "Ich höre...") {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (e: Exception) {
+            trelloResult = "Spracherkennung nicht verfügbar: ${e.message}"
+            speakWithCallback(trelloResult)
         }
     }
 
-    private fun handleAddListNewListName(spokenListName: String) {
-        currentNewListName = spokenListName
-        speakWithCallback("Okay, die neue Liste im Board '$currentBoardName' soll '$currentNewListName' heißen. Ist das richtig?") {
-            startSpeechInput("Ja oder Nein?")
-        }
-        currentGlobalState = ControllerState.AddList_ConfirmCreation
+    private fun normalizeSpeechCommand(command: String): String {
+        return command.lowercase(Locale.GERMAN).trim()
     }
 
-    private fun handleAddListConfirmCreation(confirmation: String) {
-        if (confirmation.contains("ja")) {
-            if (currentBoardId != null && currentNewListName != null) {
-                addListToBoard(trelloKey, trelloToken, currentBoardId!!, currentNewListName!!,
-                    onSuccess = {
-                        val successMsg = "Liste '$currentNewListName' wurde im Board '$currentBoardName' erstellt."
-                        trelloResult = successMsg
-                        speakWithCallback(successMsg) { resetAllStates() }
-                    },
-                    onError = { error ->
-                        val errorMsg = "Fehler beim Erstellen der Liste: $error"
-                        trelloResult = errorMsg
-                        speakWithCallback(errorMsg) { resetAllStates() }
-                    }
-                )
-            } else {
-                speakWithCallback("Interner Fehler: Board ID oder Listenname fehlt.") { resetAllStates() }
-            }
-        } else {
-            speakWithCallback("Okay, Liste nicht erstellt.") { resetAllStates() }
-        }
-    }
+    private val utteranceCallbacks = mutableMapOf<String, (() -> Unit)?>()
 
     private fun handleSingleShotConfirmation(confirmation: String) {
         if (confirmation.contains("ja")) {
@@ -523,7 +470,7 @@ class MainActivity : ComponentActivity() {
                         if (::textToSpeech.isInitialized && textToSpeech.isSpeaking) {
                             textToSpeech.stop()
                         }
-                        resetAllStates() // Ruft auch addCardFlow.resetState() auf
+                        resetAllStates() // Ruft auch addListFlow.resetState() auf
                         startSpeechInput("Was möchtest du tun?")
                     },
                     modifier = Modifier.fillMaxWidth().height(70.dp)
