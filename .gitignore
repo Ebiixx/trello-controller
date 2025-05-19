@@ -1,0 +1,87 @@
+# Android/IntelliJ
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Sicherstellen, dass gradle.properties (Keys!) nicht im Repo landet
+gradle.properties
+/app/gradle.properties
+**/gradle.properties
+
+# Falls du Environment-Files nutzt
+.env
+.env.*
+
+# Sonstige versteckte Systemeinstellungen oder temporäre Dateien
+.idea/
+*.apk
+*.ap_
+*.dex
+*.class
+*.log
+*.tmp
+
+# Android Studio Profiling & Test Output
+*.hprof
+*.orig
+*.rej
+/test-output
+/integration-tests
+/reports
+
+# VSCode (falls du es nutzt)
+.vscode/
+
+# macOS System files
+.DS_Store
+
+# Windows System files
+Thumbs.db
+
+# Keystore files (für Release-Signing)
+*.jks
+*.keystore
+*.pem
+*.key
+
+# Proguard/Mappings (Release Obfuscation)
+mapping.txt
+output-mapping.txt
+
+# Build output (kann sehr groß werden!)
+/app/build/
+/build/
+
+# NDK
+.obj/
+
+# Google Services Config
+google-services.json
+app/google-services.json
+
+# Firebase Crashlytics config
+crashlytics-build.properties
+
+# Compose Preview cache (optional)
+.idea/compose-preview
+
+# Kotlin daemon files
+.kotlin/
+
+# Sonstige temporäre Dateien, die entstehen können
+*.swp
+*.swo
+*.bak
+*.tmp
