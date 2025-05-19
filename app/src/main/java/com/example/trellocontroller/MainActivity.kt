@@ -88,20 +88,31 @@ class MainActivity : ComponentActivity() {
 
     private fun findBestMatch(
         name: String,
-        candidates: List<String>,
-        maxDist: Int = 6
+        candidates: List<String>
+        // No explicit maxDist parameter anymore, it's dynamic
     ): String? {
         val lowerName = name.lowercase()
+        // Dynamic maxDist: more lenient for longer names, stricter for shorter.
+        // Example: length 3 -> maxDist 2; length 6 -> maxDist 2; length 9 -> maxDist 3; length 15 -> maxDist 5; length 20 -> maxDist 6
+        val dynamicMaxDist = (lowerName.length / 3).coerceAtLeast(2).coerceAtMost(6)
+
         return candidates
-            .minByOrNull {
-                val candLower = it.lowercase()
-                if (candLower.contains(lowerName) || lowerName.contains(candLower)) 0 else levenshtein(candLower, lowerName)
+            .minByOrNull { candidate -> // Find the candidate with the overall minimum distance
+                val candLower = candidate.lowercase()
+                if (candLower.contains(lowerName) || lowerName.contains(candLower)) {
+                    0 // Substring match is best
+                } else {
+                    levenshtein(candLower, lowerName)
+                }
             }
-            ?.takeIf {
-                val candLower = it.lowercase()
-                candLower.contains(lowerName) ||
-                        lowerName.contains(candLower) ||
-                        levenshtein(candLower, lowerName) <= maxDist
+            ?.takeIf { bestMatchCandidate -> // Now check if this best match is within our dynamic tolerance
+                val candLower = bestMatchCandidate.lowercase()
+                val actualDistance = if (candLower.contains(lowerName) || lowerName.contains(candLower)) {
+                    0
+                } else {
+                    levenshtein(candLower, lowerName)
+                }
+                actualDistance <= dynamicMaxDist
             }
     }
 
@@ -167,27 +178,69 @@ class MainActivity : ComponentActivity() {
     fun normalizeSpeechCommand(input: String): String {
         return input
             .replace(Regex("\\bimport\\b", RegexOption.IGNORE_CASE), "im Board")
+            .replace(Regex("\\bim board\\b", RegexOption.IGNORE_CASE), "im Board")
+            .replace(Regex("\\bauf dem board\\b", RegexOption.IGNORE_CASE), "im Board")
+            .replace(Regex("\\bauf board\\b", RegexOption.IGNORE_CASE), "im Board")
+            .replace(Regex("\\bin board\\b", RegexOption.IGNORE_CASE), "im Board")
+
+            .replace(Regex("\\bin der liste\\b", RegexOption.IGNORE_CASE), "in der Liste")
+            .replace(Regex("\\bauf der liste\\b", RegexOption.IGNORE_CASE), "in der Liste")
+            .replace(Regex("\\bin liste\\b", RegexOption.IGNORE_CASE), "in Liste")
+
             .replace(Regex("\\bex\\b", RegexOption.IGNORE_CASE), "X")
             .replace(Regex("\\bin die\\b", RegexOption.IGNORE_CASE), "in die")
+
             .replace(Regex("\\bkarte\\b", RegexOption.IGNORE_CASE), "Karte")
+            .replace(Regex("\\bneue karte\\b", RegexOption.IGNORE_CASE), "neue Karte")
+            .replace(Regex("\\berstelle karte\\b", RegexOption.IGNORE_CASE), "erstelle Karte")
+            .replace(Regex("\\berstell mir ne karte\\b", RegexOption.IGNORE_CASE), "erstelle Karte")
+            .replace(Regex("\\bmach ne karte\\b", RegexOption.IGNORE_CASE), "erstelle Karte")
+
             .replace(Regex("\\bliste\\b", RegexOption.IGNORE_CASE), "Liste")
+            .replace(Regex("\\bneue liste\\b", RegexOption.IGNORE_CASE), "neue Liste")
+            .replace(Regex("\\berstelle liste\\b", RegexOption.IGNORE_CASE), "erstelle Liste")
+
             .replace(Regex("\\bboard\\b", RegexOption.IGNORE_CASE), "Board")
             // häufige Missverständnisse:
             .replace(Regex("\\bto do\\b", RegexOption.IGNORE_CASE), "To Do")
             .replace(Regex("\\btodo\\b", RegexOption.IGNORE_CASE), "To Do")
+            .replace(Regex("\\bto-do\\b", RegexOption.IGNORE_CASE), "To Do")
+            .replace(Regex("\\b tu du\\b", RegexOption.IGNORE_CASE), " To Do")
+
+
             .replace(Regex("\\bbacklog\\b", RegexOption.IGNORE_CASE), "Backlog")
+            .replace(Regex("\\bbeck blog\\b", RegexOption.IGNORE_CASE), "Backlog")
+            .replace(Regex("\\b beck lock\\b", RegexOption.IGNORE_CASE), " Backlog")
+
+
             .replace(Regex("\\bdone\\b", RegexOption.IGNORE_CASE), "Done")
             .replace(Regex("\\bdann\\b", RegexOption.IGNORE_CASE), "Done")
+            .replace(Regex("\\bfertig\\b", RegexOption.IGNORE_CASE), "Done")
+
             .replace(Regex("\\bcard\\b", RegexOption.IGNORE_CASE), "Karte")
-            .replace(Regex("\\btrott\\b", RegexOption.IGNORE_CASE), "Trello") // falls „Trello“ als „Trott“ erkannt wird
+            .replace(Regex("\\btrott\\b", RegexOption.IGNORE_CASE), "Trello")
             .replace(Regex("\\btrailer\\b", RegexOption.IGNORE_CASE), "Trello")
+            .replace(Regex("\\bdrello\\b", RegexOption.IGNORE_CASE), "Trello")
+
             .replace(Regex("\\bimboard\\b", RegexOption.IGNORE_CASE), "im Board")
             // Weitere Varianten:
             .replace(Regex("\\bkarte in\\b", RegexOption.IGNORE_CASE), "Karte in")
             .replace(Regex("\\bkarte von\\b", RegexOption.IGNORE_CASE), "Karte von")
+
+            // Specific commands / actions
+            .replace(Regex("\\bfüge hinzu\\b", RegexOption.IGNORE_CASE), "füge hinzu")
+            .replace(Regex("\\bhinzufügen\\b", RegexOption.IGNORE_CASE), "hinzufügen")
+            .replace(Regex("\\bverschiebe\\b", RegexOption.IGNORE_CASE), "verschiebe")
+            .replace(Regex("\\bkommentar\\b", RegexOption.IGNORE_CASE), "Kommentar")
+            .replace(Regex("\\bkommentiere\\b", RegexOption.IGNORE_CASE), "kommentiere")
+
             // Eigenname-Vervollständigungen (bei Listen- oder Board-Namen):
             .replace(Regex("\\bjob agent\\b", RegexOption.IGNORE_CASE), "Jobagent")
-        // und was du sonst noch brauchst!
+            .replace(Regex("\\bshop agent\\b", RegexOption.IGNORE_CASE), "Jobagent")
+
+            // Umlaut normalization as a final step, can be aggressive
+            .replace("ae", "ä").replace("oe", "ö").replace("ue", "ü")
+            .replace("Ae", "Ä").replace("Oe", "Ö").replace("Ue", "Ü")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
