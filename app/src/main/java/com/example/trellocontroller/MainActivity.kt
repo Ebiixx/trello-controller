@@ -14,12 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.trellocontroller.flows.AddCardFlow
 import com.example.trellocontroller.flows.AddCardFlowDependencies
 import com.example.trellocontroller.flows.AddListFlow
@@ -28,6 +23,8 @@ import com.example.trellocontroller.flows.RenameCardFlow // Added
 import com.example.trellocontroller.flows.RenameCardFlowDependencies // Added
 import com.example.trellocontroller.utils.normalizeSpeechCommand // Import for normalizeSpeechCommand
 import com.example.trellocontroller.utils.buildUiConfirmationText // Import for buildUiConfirmationText
+import com.example.trellocontroller.ui.MainScreen
+import com.example.trellocontroller.ui.theme.TrelloControllerTheme // Geändert von ui.TrelloControllerTheme
 import org.json.JSONObject
 import java.util.*
 
@@ -331,9 +328,29 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            TrelloControllerTheme { // Verwende das hier definierte Theme
+            TrelloControllerTheme { // Use TrelloControllerTheme from ui package
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MainScreen()
+                    val contextualInfo = if (currentFlowContextText.isNotBlank()) {
+                        currentFlowContextText
+                    } else if (actionJsonForUi != null && currentGlobalState == ControllerState.WaitingForConfirmation) {
+                        buildUiConfirmationText(actionJsonForUi!!)
+                    } else {
+                        ""
+                    }
+
+                    MainScreen(
+                        statusText = currentGlobalState.name,
+                        spokenText = spokenText,
+                        contextualInfoText = contextualInfo,
+                        trelloResultText = trelloResult,
+                        onStartSpeechOrResetClick = {
+                            if (::textToSpeech.isInitialized && textToSpeech.isSpeaking) {
+                                textToSpeech.stop()
+                            }
+                            resetAllStates()
+                            startSpeechInput("Was möchtest du tun?")
+                        }
+                    )
                 }
             }
         }
@@ -453,66 +470,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    fun MainScreen() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "Trello Sprachsteuerung",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
-
-                Button(
-                    onClick = {
-                        if (::textToSpeech.isInitialized && textToSpeech.isSpeaking) {
-                            textToSpeech.stop()
-                        }
-                        resetAllStates() // Ruft auch addListFlow.resetState() und renameCardFlow.resetState() auf
-                        startSpeechInput("Was möchtest du tun?")
-                    },
-                    modifier = Modifier.fillMaxWidth().height(70.dp)
-                ) {
-                    Text("Sprachbefehl starten / Reset", style = MaterialTheme.typography.titleMedium)
-                }
-                Spacer(Modifier.height(20.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.Start) {
-                        Text("Status: ${currentGlobalState.name}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(10.dp))
-                        Text("🗣️ Erkannt:", style = MaterialTheme.typography.labelMedium)
-                        Text(spokenText, style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(8.dp))
-
-                        if (currentFlowContextText.isNotBlank()) {
-                            Text("💬 Kontext/Flow:", style = MaterialTheme.typography.labelMedium)
-                            Text(currentFlowContextText, style = MaterialTheme.typography.bodyMedium)
-                            Spacer(Modifier.height(8.dp))
-                        } else if (actionJsonForUi != null && currentGlobalState == ControllerState.WaitingForConfirmation) {
-                            Text("💬 Kontext/KI:", style = MaterialTheme.typography.labelMedium)
-                            Text(buildUiConfirmationText(actionJsonForUi!!), style = MaterialTheme.typography.bodyMedium) // Use imported function
-                            Spacer(Modifier.height(8.dp))
-                        }
-
-                        Text("📝 Trello-Status:", style = MaterialTheme.typography.labelMedium)
-                        Text(trelloResult, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-            Text("© 2024 TrelloController", style = MaterialTheme.typography.bodySmall) // Angepasst
-        }
-    }
-
     override fun onDestroy() {
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
@@ -521,64 +478,3 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 }
-
-// Theme (kann in eine eigene Datei ausgelagert werden, z.B. ui/theme/Theme.kt)
-@Composable
-fun TrelloControllerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme( // oder darkColorScheme
-            primary = md_theme_light_primary,
-            onPrimary = md_theme_light_onPrimary,
-            background = md_theme_light_background,
-            surface = md_theme_light_surface,
-            // Füge hier weitere Farben deines Themes hinzu, falls benötigt
-            // secondary = ...,
-            // error = ...,
-            // etc.
-        ),
-        typography = Typography, // Deine Typografie-Definition (siehe unten)
-        content = content
-    )
-}
-
-// Beispiel-Farben (ersetze diese mit deinen tatsächlichen Theme-Farben)
-// Diese sollten idealerweise in einer eigenen Datei liegen (z.B. ui/theme/Color.kt)
-val md_theme_light_primary = Color(0xFF00629B) // Trello Blau als Beispiel
-val md_theme_light_onPrimary = Color(0xFFFFFFFF)
-val md_theme_light_background = Color(0xFFFDFCFB)
-val md_theme_light_surface = Color(0xFFFDFCFB)
-
-// Beispiel-Typografie (ersetze oder erweitere diese)
-// Diese sollte idealerweise in einer eigenen Datei liegen (z.B. ui/theme/Type.kt)
-val Typography = Typography(
-    headlineSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp
-    ),
-    titleMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 18.sp
-    ),
-    titleSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp
-    ),
-    labelMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp
-    ),
-    bodySmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp
-    )
-)

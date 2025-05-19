@@ -38,6 +38,11 @@
     - `buildUiConfirmationText` aus `MainActivity.kt` nach `utils/UiUtils.kt` verschoben.
     - `getBestMatchingBoardId` und `getBestMatchingListId` aus `MainActivity.kt` nach `api.kt` verschoben.
     - `MainActivity.kt` verwendet nun die ausgelagerten Funktionen.
+- Refactored `MainScreen` composable into its own file (`app/src/main/java/com/example/trellocontroller/ui/MainScreen.kt`).
+- Updated `MainActivity` to use the new `MainScreen` composable.
+- Corrected package name in `Theme.kt` from `com.example.trellocontroller.ui` to `com.example.trellocontroller.ui.theme`.
+- Adjusted `TrelloControllerTheme` import in `MainActivity.kt` to reflect the new package structure.
+- Removed duplicate `Typography` definition from `Theme.kt` to resolve conflicting declarations, relying on `Type.kt` for typography styles.
 
 ## [1.1.0] - 2025-05-18
 
