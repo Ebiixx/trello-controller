@@ -427,6 +427,43 @@ fun renameCardOnTrello(
     })
 }
 
+// Function to move a card to a new list (and potentially new board)
+fun moveCardOnTrello(
+    key: String,
+    token: String,
+    cardId: String,
+    targetListId: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val url = "https://api.trello.com/1/cards/$cardId"
+    val formBody = FormBody.Builder()
+        .add("key", key)
+        .add("token", token)
+        .add("idList", targetListId) // targetListId implies the target board as well
+        .build()
+    val request = Request.Builder()
+        .url(url)
+        .put(formBody)
+        .build()
+
+    OkHttpClient().newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            onError(e.message ?: "API call failed to move card")
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            if (response.isSuccessful) {
+                onSuccess()
+            } else {
+                val errorBody = response.body?.string()
+                onError("Error ${response.code} moving card: $errorBody")
+            }
+            response.close()
+        }
+    })
+}
+
 fun getCardsFromList(
     key: String,
     token: String,

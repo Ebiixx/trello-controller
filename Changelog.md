@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.2] - 2025-05-19
+
+### Hinzugefügt
+
+- **Karte verschieben Dialogfluss**: Neuer mehrstufiger Dialog zum Verschieben von Karten zwischen Listen und Boards.
+  - Neuer Flow `MoveCardFlow` mit eigenem State-Handling, Fehlerbehandlung und Bestätigungsdialog.
+  - Integration der API-Funktion `moveCardOnTrello(key, token, cardId, targetListId, onSuccess, onError)` zum Verschieben einer Karte.
+  - Nutzer können jetzt per Sprachbefehl Karten verschieben, inklusive Auswahl von Quell-Board, Quell-Liste, Karte, Ziel-Board und Ziel-Liste sowie Bestätigung.
+  - UI-Kontextanzeige und Statusmeldungen für den Verschiebeprozess.
+
 ## [1.2.1] - 2025-05-19
 
 ### Hinzugefügt
@@ -115,4 +125,5 @@
 ## [Unreleased]
 
 ### Fixed
+
 - Korrekte Übergabe des `trelloResult`-Wertes (String) an die `MainScreen`-Komponente in `MainActivity.kt`, um einen Typenkonflikt zu beheben.

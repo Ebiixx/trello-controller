@@ -148,20 +148,4 @@ class MainActivity : ComponentActivity(), MainViewModelActions {
         super.onDestroy()
     }
 
-    // Folgende Member wurden ins ViewModel verschoben:
-    // - private var currentGlobalState by mutableStateOf(...)
-    // - private var spokenText by mutableStateOf(...)
-    // - private var actionJsonForUi by mutableStateOf<JSONObject?>(...)
-    // - private var trelloResult by mutableStateOf(...)
-    // - private var currentFlowContextText by mutableStateOf(...)
-    // - private lateinit var addCardFlow: AddCardFlow
-    // - private lateinit var addListFlow: AddListFlow
-    // - private lateinit var renameCardFlow: RenameCardFlow
-    // - private val trelloKey: String by lazy { ... } (und andere API Keys)
-    // - private var currentTrelloAction by mutableStateOf<String?>(...)
-    // - override fun onCreate: Initialisierung der Flows und ihrer Dependencies
-    // - private fun handleGeneralSpokenInput(input: String)
-    // - private fun resetMultiTurnStateVariables()
-    // - private fun resetAllStates()
-    // - private fun handleSingleShotConfirmation(confirmation: String)
 }
