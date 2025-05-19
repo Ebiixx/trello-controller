@@ -469,3 +469,54 @@ fun getCardsFromList(
         }
     })
 }
+
+fun getBestMatchingBoardId(
+    apiKey: String,
+    apiToken: String,
+    boardNameInput: String,
+    onResult: (boardId: String?, matchedBoardName: String?) -> Unit,
+    onError: (String) -> Unit
+) {
+    getAllBoards(apiKey, apiToken,
+        onResult = { boards ->
+            val exactMatch = boards.firstOrNull { it.first.equals(boardNameInput, ignoreCase = true) }
+            if (exactMatch != null) {
+                onResult(exactMatch.second, exactMatch.first)
+                return@getAllBoards
+            }
+            val partialMatch = boards.firstOrNull { it.first.contains(boardNameInput, ignoreCase = true) }
+            if (partialMatch != null) {
+                onResult(partialMatch.second, partialMatch.first)
+            } else {
+                onResult(null, null)
+            }
+        },
+        onError = onError
+    )
+}
+
+fun getBestMatchingListId(
+    apiKey: String,
+    apiToken: String,
+    boardId: String,
+    listNameInput: String,
+    onResult: (listId: String?, matchedListName: String?) -> Unit,
+    onError: (String) -> Unit
+) {
+    getAllLists(apiKey, apiToken, boardId,
+        onResult = { lists ->
+            val exactMatch = lists.firstOrNull { it.first.equals(listNameInput, ignoreCase = true) }
+            if (exactMatch != null) {
+                onResult(exactMatch.second, exactMatch.first)
+                return@getAllLists
+            }
+            val partialMatch = lists.firstOrNull { it.first.contains(listNameInput, ignoreCase = true) }
+            if (partialMatch != null) {
+                onResult(partialMatch.second, partialMatch.first)
+            } else {
+                onResult(null, null)
+            }
+        },
+        onError = onError
+    )
+}

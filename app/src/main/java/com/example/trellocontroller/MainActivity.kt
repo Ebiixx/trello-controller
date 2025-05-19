@@ -26,6 +26,8 @@ import com.example.trellocontroller.flows.AddListFlow
 import com.example.trellocontroller.flows.AddListFlowDependencies
 import com.example.trellocontroller.flows.RenameCardFlow // Added
 import com.example.trellocontroller.flows.RenameCardFlowDependencies // Added
+import com.example.trellocontroller.utils.normalizeSpeechCommand // Import for normalizeSpeechCommand
+import com.example.trellocontroller.utils.buildUiConfirmationText // Import for buildUiConfirmationText
 import org.json.JSONObject
 import java.util.*
 
@@ -105,7 +107,7 @@ class MainActivity : ComponentActivity() {
                 onResult: (boardId: String?, matchedBoardName: String?) -> Unit,
                 onError: (String) -> Unit
             ) {
-                this@MainActivity.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
+                com.example.trellocontroller.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
             }
 
             override fun getAllBoards(
@@ -121,7 +123,7 @@ class MainActivity : ComponentActivity() {
                 onResult: (listId: String?, matchedListName: String?) -> Unit,
                 onError: (String) -> Unit
             ) {
-                this@MainActivity.getBestMatchingListId(trelloKey, trelloToken, boardId, listName, onResult, onError)
+                com.example.trellocontroller.getBestMatchingListId(trelloKey, trelloToken, boardId, listName, onResult, onError)
             }
 
             override fun getAllLists(
@@ -178,7 +180,7 @@ class MainActivity : ComponentActivity() {
                 onResult: (boardId: String?, matchedBoardName: String?) -> Unit,
                 onError: (String) -> Unit
             ) {
-                this@MainActivity.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
+                com.example.trellocontroller.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
             }
 
             override fun getAllBoards(
@@ -229,7 +231,7 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun getBestMatchingBoardId(boardName: String, onResult: (boardId: String?, matchedBoardName: String?) -> Unit, onError: (String) -> Unit) {
-                this@MainActivity.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
+                com.example.trellocontroller.getBestMatchingBoardId(trelloKey, trelloToken, boardName, onResult, onError)
             }
 
             override fun getAllBoards(onResult: (List<Pair<String, String>>) -> Unit, onError: (String) -> Unit) {
@@ -237,7 +239,7 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun getBestMatchingListId(boardId: String, listName: String, onResult: (listId: String?, matchedListName: String?) -> Unit, onError: (String) -> Unit) {
-                this@MainActivity.getBestMatchingListId(trelloKey, trelloToken, boardId, listName, onResult, onError)
+                com.example.trellocontroller.getBestMatchingListId(trelloKey, trelloToken, boardId, listName, onResult, onError)
             }
 
             override fun getAllLists(boardId: String, onResult: (List<Pair<String, String>>) -> Unit, onError: (String) -> Unit) {
@@ -367,7 +369,7 @@ class MainActivity : ComponentActivity() {
                                      // Fallback für andere Aktionen (Single-Shot-Flow)
                                      actionJsonForUi = obj
                                      if (action.isNotBlank()) {
-                                         val confirmationText = buildUiConfirmationText(obj)
+                                         val confirmationText = buildUiConfirmationText(obj) // Use imported function
                                          speakWithCallback(confirmationText) { startSpeechInput("Bitte mit Ja oder Nein antworten") }
                                          currentGlobalState = ControllerState.WaitingForConfirmation
                                      } else {
@@ -413,71 +415,6 @@ class MainActivity : ComponentActivity() {
         currentGlobalState = ControllerState.WaitingForInitialCommand
     }
 
-    private fun getBestMatchingBoardId(
-        apiKey: String,
-        apiToken: String,
-        boardNameInput: String, // Hier wird mit der normalisierten Eingabe gesucht
-        onResult: (boardId: String?, matchedBoardName: String?) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        com.example.trellocontroller.getAllBoards(apiKey, apiToken,
-            onResult = { boards ->
-                val exactMatch = boards.firstOrNull { it.first.equals(boardNameInput, ignoreCase = true) }
-                if (exactMatch != null) {
-                    onResult(exactMatch.second, exactMatch.first)
-                    return@getAllBoards
-                }
-                val partialMatch = boards.firstOrNull { it.first.contains(boardNameInput, ignoreCase = true) }
-                if (partialMatch != null) {
-                    onResult(partialMatch.second, partialMatch.first)
-                } else {
-                    onResult(null, null)
-                }
-            },
-            onError = onError
-        )
-    }
-
-    private fun getBestMatchingListId(
-        apiKey: String,
-        apiToken: String,
-        boardId: String,
-        listNameInput: String,
-        onResult: (listId: String?, matchedListName: String?) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        com.example.trellocontroller.getAllLists(apiKey, apiToken, boardId,
-            onResult = { lists ->
-                val exactMatch = lists.firstOrNull { it.first.equals(listNameInput, ignoreCase = true) }
-                if (exactMatch != null) {
-                    onResult(exactMatch.second, exactMatch.first)
-                    return@getAllLists
-                }
-                val partialMatch = lists.firstOrNull { it.first.contains(listNameInput, ignoreCase = true) }
-                if (partialMatch != null) {
-                    onResult(partialMatch.second, partialMatch.first)
-                } else {
-                    onResult(null, null)
-                }
-            },
-            onError = onError
-        )
-    }
-
-    private fun buildUiConfirmationText(json: JSONObject): String {
-        val action = json.optString("action", "Unbekannte Aktion")
-        val board = json.optString("board", "")
-        val list = json.optString("list", "")
-        val title = json.optString("title", "")
-        // val newTitle = json.optString("new_title", "") // If AI provides it for rename_card
-        return when (action) {
-            "add_card" -> "Soll Karte '$title' zu Liste '$list' auf Board '$board' hinzugefügt werden?" // Wird jetzt vom Flow gehandhabt
-            "add_list" -> "Soll Liste '$list' zu Board '$board' hinzugefügt werden?" // Wird jetzt vom Flow gehandhabt
-            "rename_card" -> "Soll Karte '$title' umbenannt werden? (Details folgen im Dialog)" // Wird jetzt vom Flow gehandhabt
-            else -> "Aktion: $action, Details: ${json.toString(2)}"
-        }
-    }
-
     private fun speakWithCallback(text: String, onDone: (() -> Unit)? = null) {
         val utteranceId = UUID.randomUUID().toString()
         utteranceCallbacks[utteranceId] = onDone
@@ -496,10 +433,6 @@ class MainActivity : ComponentActivity() {
             trelloResult = "Spracherkennung nicht verfügbar: ${e.message}"
             speakWithCallback(trelloResult)
         }
-    }
-
-    private fun normalizeSpeechCommand(command: String): String {
-        return command.lowercase(Locale.GERMAN).trim()
     }
 
     private val utteranceCallbacks = mutableMapOf<String, (() -> Unit)?>()
@@ -567,7 +500,7 @@ class MainActivity : ComponentActivity() {
                             Spacer(Modifier.height(8.dp))
                         } else if (actionJsonForUi != null && currentGlobalState == ControllerState.WaitingForConfirmation) {
                             Text("💬 Kontext/KI:", style = MaterialTheme.typography.labelMedium)
-                            Text(buildUiConfirmationText(actionJsonForUi!!), style = MaterialTheme.typography.bodyMedium)
+                            Text(buildUiConfirmationText(actionJsonForUi!!), style = MaterialTheme.typography.bodyMedium) // Use imported function
                             Spacer(Modifier.height(8.dp))
                         }
 

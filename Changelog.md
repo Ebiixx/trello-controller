@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - 2025-05-19
+## [1.2.0] - 2025-05-19
 
 ### Hinzugefügt
 - **Karte umbenennen Dialogfluss**: Implementierung eines mehrstufigen Dialogs zum Umbenennen von Karten.
@@ -24,12 +24,20 @@
     - `archiveCardOnTrello(key, token, cardId, onSuccess, onError)` in `api.kt` hinzugefügt, um eine Karte über ihre ID zu archivieren (setzt `closed=true` via PUT-Request). Verwendet `HttpURLConnection`.
 - **Karten-Matching**:
     - `getBestMatchingCardIdInList` in `MainActivity.kt` hinzugefügt, um die am besten passende Karte basierend auf einem Suchbegriff in einer Liste zu finden.
+- **Utility-Dateien**:
+    - `utils/StringUtils.kt` für String-bezogene Hilfsfunktionen.
+    - `utils/UiUtils.kt` für UI-bezogene Hilfsfunktionen.
 
 ### Geändert
-- `buildUiConfirmationText` in `MainActivity.kt` erweitert, um Bestätigungstexte für die Aktionen "archive_card" und "rename_card" zu generieren.
+- `buildUiConfirmationText` in `MainActivity.kt` erweitert, um Bestätigungstexte für die Aktionen "archive_card" und "rename_card" zu generieren. (Hinweis: Diese Funktion wurde später nach `UiUtils.kt` verschoben).
 - Die Logik in `MainActivity.kt` (`when (state)`) wurde erheblich erweitert, um die neuen Dialogflüsse ("Karte archivieren", "Karte umbenennen") zu unterstützen.
 - Die Zustandsbehandlung für `AddCard_ConfirmBoardNotFound`, `AddCard_ConfirmListNotFound` und `ArchiveCard_ConfirmCardNotFound` wurde generalisiert, um von mehreren Flüssen genutzt zu werden.
 - Die UI-Anzeige (`currentActionInfo`) in `MainActivity.kt` wurde angepasst, um den Kontext der neuen Aktionen korrekt darzustellen.
+- **Refactoring von Hilfsfunktionen**:
+    - `normalizeSpeechCommand` aus `MainActivity.kt` nach `utils/StringUtils.kt` verschoben.
+    - `buildUiConfirmationText` aus `MainActivity.kt` nach `utils/UiUtils.kt` verschoben.
+    - `getBestMatchingBoardId` und `getBestMatchingListId` aus `MainActivity.kt` nach `api.kt` verschoben.
+    - `MainActivity.kt` verwendet nun die ausgelagerten Funktionen.
 
 ## [1.1.0] - 2025-05-18
 
