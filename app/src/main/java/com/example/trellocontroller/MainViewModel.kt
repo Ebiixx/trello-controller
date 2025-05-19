@@ -62,6 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     lateinit var addCardFlow: AddCardFlow
     lateinit var addListFlow: AddListFlow
     lateinit var renameCardFlow: RenameCardFlow
+    lateinit var archiveCardFlow: ArchiveCardFlow
 
     private var viewModelActions: MainViewModelActions? = null
 
@@ -132,6 +133,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 com.example.trellocontroller.renameCardOnTrello(trelloKey, trelloToken, cardId, newName, onSuccess, onError)
             }
         })
+
+        archiveCardFlow = ArchiveCardFlow(object : ArchiveCardFlowDependencies, CommonFlowDependencies by commonFlowDependenciesImpl {
+            override fun getCardsFromList(listId: String, onResult: (List<Pair<String, String>>) -> Unit, onError: (String) -> Unit) {
+                com.example.trellocontroller.getCardsFromList(trelloKey, trelloToken, listId, onResult, onError)
+            }
+            override fun archiveCardOnTrello(cardId: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+                com.example.trellocontroller.archiveCardOnTrello(trelloKey, trelloToken, cardId, onSuccess, onError)
+            }
+        })
     }
 
     fun handleSpeechRecognitionResult(spoken: String?) {
@@ -144,6 +154,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             addListFlow.handleSpokenInput(fixedSpoken)
         } else if (::renameCardFlow.isInitialized && renameCardFlow.isActive()) {
             renameCardFlow.handleSpokenInput(fixedSpoken)
+        } else if (::archiveCardFlow.isInitialized && archiveCardFlow.isActive()) {
+            archiveCardFlow.handleSpokenInput(fixedSpoken)
         } else {
             processGeneralSpokenInput(fixedSpoken)
         }
@@ -152,7 +164,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun handleSpeechRecognitionError() {
         val activeFlow = addCardFlow.isActive() ||
                          (::addListFlow.isInitialized && addListFlow.isActive()) ||
-                         (::renameCardFlow.isInitialized && renameCardFlow.isActive())
+                         (::renameCardFlow.isInitialized && renameCardFlow.isActive()) ||
+                         (::archiveCardFlow.isInitialized && archiveCardFlow.isActive())
 
         if (activeFlow) {
             viewModelActions?.speakWithCallback("Spracheingabe fehlgeschlagen. Bitte erneut versuchen oder 'Abbrechen' sagen.") {
@@ -190,6 +203,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             } else if (action == "rename_card") {
                                 currentGlobalState = ControllerState.ExecutingAction
                                 renameCardFlow.start(obj)
+                            } else if (action == "archive_card") {
+                                currentGlobalState = ControllerState.ExecutingAction
+                                archiveCardFlow.start(obj)
                             } else {
                                 actionJsonForUi = obj
                                 if (action.isNotBlank()) {
@@ -249,6 +265,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (::addCardFlow.isInitialized && addCardFlow.isActive()) addCardFlow.resetState()
         if (::addListFlow.isInitialized && addListFlow.isActive()) addListFlow.resetState()
         if (::renameCardFlow.isInitialized && renameCardFlow.isActive()) renameCardFlow.resetState()
+        if (::archiveCardFlow.isInitialized && archiveCardFlow.isActive()) archiveCardFlow.resetState()
         resetMultiTurnStateVariables()
         spokenText = ""
         setTrelloResult("")

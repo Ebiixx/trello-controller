@@ -520,3 +520,38 @@ fun getBestMatchingListId(
         onError = onError
     )
 }
+
+fun archiveCardOnTrello(
+    key: String,
+    token: String,
+    cardId: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val url = "https://api.trello.com/1/cards/$cardId"
+    val formBody = FormBody.Builder()
+        .add("key", key)
+        .add("token", token)
+        .add("closed", "true")
+        .build()
+    val request = Request.Builder()
+        .url(url)
+        .put(formBody)
+        .build()
+
+    OkHttpClient().newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            onError(e.message ?: "API call failed")
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            if (response.isSuccessful) {
+                onSuccess()
+            } else {
+                val errorBody = response.body?.string()
+                onError("Error ${response.code}: $errorBody")
+            }
+            response.close()
+        }
+    })
+}
