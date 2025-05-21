@@ -22,7 +22,7 @@ interface MainViewModelActions {
 interface CommonFlowDependencies {
     val trelloKey: String
     val trelloToken: String
-    fun speakWithCallback(text: String, onDone: (() -> Unit)? = null)
+    fun speakWithCallback(text: String, onDone: (() -> Unit)?)
     fun startSpeechInput(prompt: String)
     fun getBestMatchingBoardId(boardName: String, onResult: (boardId: String?, matchedBoardName: String?) -> Unit, onError: (String) -> Unit)
     fun getAllBoards(onResult: (List<Pair<String, String>>) -> Unit, onError: (String) -> Unit)
