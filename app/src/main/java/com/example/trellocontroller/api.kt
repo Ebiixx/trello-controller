@@ -89,7 +89,7 @@ fun buildTrelloPrompt(
         JSON-Format (nur Felder die erkannt wurden, Rest leer lassen):
 
         {
-          "action": "add_card | delete_card | move_card | archive_card | add_comment | add_due_date | remove_due_date | add_label | remove_label | assign_member | remove_member | rename_card | update_desc | add_list",
+          "action": "add_card | delete_card | move_card | archive_card | add_comment | add_due_date | remove_due_date | add_label | remove_label | assign_member | remove_member | rename_card | update_desc | add_list | rename_list",
           "board": "Boardname",
           "list": "Listenname",
           "title": "Kartentitel",
@@ -619,6 +619,42 @@ fun deleteCardOnTrello(
                 onError("Error ${response.code} deleting card: $errorBody")
             }
             response.close() // Ensure the response body is closed
+        }
+    })
+}
+
+fun renameListOnTrello(
+    key: String,
+    token: String,
+    listId: String,
+    newName: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val url = "https://api.trello.com/1/lists/$listId"
+    val formBody = FormBody.Builder()
+        .add("key", key)
+        .add("token", token)
+        .add("name", newName)
+        .build()
+    val request = Request.Builder()
+        .url(url)
+        .put(formBody) // Trello API uses PUT to update list properties
+        .build()
+
+    OkHttpClient().newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            onError(e.message ?: "API call failed to rename list")
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            if (response.isSuccessful) {
+                onSuccess()
+            } else {
+                val errorBody = response.body?.string()
+                onError("Error ${response.code} renaming list: $errorBody")
+            }
+            response.close()
         }
     })
 }

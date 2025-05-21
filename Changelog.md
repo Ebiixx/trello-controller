@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.4] - 2025-05-21
+
+### Hinzugefügt
+
+- **Liste umbenennen Dialogfluss**: Implementiert die Möglichkeit, Listen über Sprachbefehle umzubenennen.
+  - Neuer Flow `RenameListFlow` mit zugehörigen `RenameListFlowDependencies`.
+  - API-Funktion `renameListOnTrello(key, token, listId, newName, onSuccess, onError)` in `api.kt` hinzugefügt, um eine Liste über ihre ID umzubenennen (via PUT-Request).
+  - Integration des `RenameListFlow` in `MainViewModel`, einschließlich Initialisierung, Zustandsbehandlung für den mehrstufigen Dialog und Verarbeitung der Spracheingaben.
+  - UI-Kontextanzeige und Statusmeldungen für den Umbenennungsvorgang.
+  - Azure OpenAI Prompt in `api.kt` (`buildTrelloPrompt`) aktualisiert, um die Aktion `rename_list` zu erkennen und die relevanten Entitäten (Board, alter Listenname, neuer Listenname) korrekt zu extrahieren und im JSON zurückzugeben.
+
+### Behoben
+
+- Problem korrigiert, bei dem der Azure OpenAI Dienst für den Befehl "Liste umbenennen" fälschlicherweise `"action": "add_list"` anstatt `"action": "rename_list"` im JSON zurückgegeben hat. Dies wurde durch Anpassung des Prompts in `buildTrelloPrompt` behoben.
+- Diverse Textausgaben im `RenameListFlow` korrigiert, um den korrekten Kontext (Liste umbenennen statt Karte oder neue Liste) widerzuspiegeln.
+
 ## [1.2.3] - 2025-05-21
 
 ### Hinzugefügt

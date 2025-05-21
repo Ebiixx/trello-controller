@@ -63,8 +63,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     lateinit var addListFlow: AddListFlow
     lateinit var renameCardFlow: RenameCardFlow
     lateinit var archiveCardFlow: ArchiveCardFlow
-    lateinit var moveCardFlow: MoveCardFlow // Added
-    lateinit var deleteCardFlow: DeleteCardFlow // Neu hinzugefügt
+    lateinit var moveCardFlow: MoveCardFlow
+    lateinit var deleteCardFlow: DeleteCardFlow
+    lateinit var renameListFlow: RenameListFlow // Neu hinzugefügt
 
     private var viewModelActions: MainViewModelActions? = null
 
@@ -163,6 +164,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 com.example.trellocontroller.deleteCardOnTrello(trelloKey, trelloToken, cardId, onSuccess, onError)
             }
         })
+
+        renameListFlow = RenameListFlow(object : RenameListFlowDependencies, CommonFlowDependencies by commonFlowDependenciesImpl {
+            override fun renameListOnTrello(listId: String, newName: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+                com.example.trellocontroller.renameListOnTrello(trelloKey, trelloToken, listId, newName, onSuccess, onError)
+            }
+        })
     }
 
     fun handleSpeechRecognitionResult(spoken: String?) {
@@ -177,10 +184,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             renameCardFlow.handleSpokenInput(fixedSpoken)
         } else if (::archiveCardFlow.isInitialized && archiveCardFlow.isActive()) {
             archiveCardFlow.handleSpokenInput(fixedSpoken)
-        } else if (::moveCardFlow.isInitialized && moveCardFlow.isActive()) { // Added
+        } else if (::moveCardFlow.isInitialized && moveCardFlow.isActive()) {
             moveCardFlow.handleSpokenInput(fixedSpoken)
-        } else if (::deleteCardFlow.isInitialized && deleteCardFlow.isActive()) { // Neu hinzugefügt
+        } else if (::deleteCardFlow.isInitialized && deleteCardFlow.isActive()) {
             deleteCardFlow.handleSpokenInput(fixedSpoken)
+        } else if (::renameListFlow.isInitialized && renameListFlow.isActive()) { // Neu hinzugefügt
+            renameListFlow.handleSpokenInput(fixedSpoken)
         } else {
             processGeneralSpokenInput(fixedSpoken)
         }
@@ -191,8 +200,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                          (::addListFlow.isInitialized && addListFlow.isActive()) ||
                          (::renameCardFlow.isInitialized && renameCardFlow.isActive()) ||
                          (::archiveCardFlow.isInitialized && archiveCardFlow.isActive()) ||
-                         (::moveCardFlow.isInitialized && moveCardFlow.isActive()) || // Added
-                         (::deleteCardFlow.isInitialized && deleteCardFlow.isActive()) // Neu hinzugefügt
+                         (::moveCardFlow.isInitialized && moveCardFlow.isActive()) ||
+                         (::deleteCardFlow.isInitialized && deleteCardFlow.isActive()) ||
+                         (::renameListFlow.isInitialized && renameListFlow.isActive()) // Neu hinzugefügt
 
         if (activeFlow) {
             viewModelActions?.speakWithCallback("Spracheingabe fehlgeschlagen. Bitte erneut versuchen oder 'Abbrechen' sagen.") {
@@ -233,12 +243,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             } else if (action == "archive_card") {
                                 currentGlobalState = ControllerState.ExecutingAction
                                 archiveCardFlow.start(obj)
-                            } else if (action == "move_card") { // Added
+                            } else if (action == "move_card") {
                                 currentGlobalState = ControllerState.ExecutingAction
                                 moveCardFlow.start(obj)
-                            } else if (action == "delete_card") { // Neu hinzugefügt
+                            } else if (action == "delete_card") {
                                 currentGlobalState = ControllerState.ExecutingAction
                                 deleteCardFlow.start(obj)
+                            } else if (action == "rename_list") { // Neu hinzugefügt
+                                currentGlobalState = ControllerState.ExecutingAction
+                                renameListFlow.start(obj)
                             } else {
                                 actionJsonForUi = obj
                                 if (action.isNotBlank()) {
@@ -299,8 +312,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (::addListFlow.isInitialized && addListFlow.isActive()) addListFlow.resetState()
         if (::renameCardFlow.isInitialized && renameCardFlow.isActive()) renameCardFlow.resetState()
         if (::archiveCardFlow.isInitialized && archiveCardFlow.isActive()) archiveCardFlow.resetState()
-        if (::moveCardFlow.isInitialized && moveCardFlow.isActive()) moveCardFlow.resetState() // Added
-        if (::deleteCardFlow.isInitialized && deleteCardFlow.isActive()) deleteCardFlow.resetState() // Neu hinzugefügt
+        if (::moveCardFlow.isInitialized && moveCardFlow.isActive()) moveCardFlow.resetState()
+        if (::deleteCardFlow.isInitialized && deleteCardFlow.isActive()) deleteCardFlow.resetState()
+        if (::renameListFlow.isInitialized && renameListFlow.isActive()) renameListFlow.resetState() // Neu hinzugefügt
         resetMultiTurnStateVariables()
         spokenText = ""
         setTrelloResult("")
