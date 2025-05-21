@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.3] - 2025-05-21
+
+### Hinzugefügt
+
+- **Karte löschen Dialogfluss**: Implementiert die Möglichkeit, Karten über Sprachbefehle endgültig zu löschen.
+  - Neuer Flow `DeleteCardFlow` mit zugehörigen `DeleteCardFlowDependencies`.
+  - API-Funktion `deleteCardOnTrello(key, token, cardId, onSuccess, onError)` in `api.kt` hinzugefügt, um eine Karte über ihre ID endgültig zu löschen (via DELETE-Request).
+  - Integration des `DeleteCardFlow` in `MainViewModel`, einschließlich Initialisierung, Zustandsbehandlung für den mehrstufigen Dialog und Verarbeitung der Spracheingaben.
+  - UI-Kontextanzeige und Statusmeldungen für den Löschvorgang.
+  - (Annahme: Der Azure OpenAI Prompt wurde entsprechend angepasst, um die Aktion "delete_card" zu erkennen und die relevanten Entitäten wie Board-, Listen- und Kartennamen zu extrahieren.)
+
 ## [1.2.2] - 2025-05-19
 
 ### Hinzugefügt

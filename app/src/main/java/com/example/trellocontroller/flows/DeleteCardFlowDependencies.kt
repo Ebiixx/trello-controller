@@ -1,6 +1,6 @@
 package com.example.trellocontroller.flows
 
-interface MoveCardFlowDependencies {
+interface DeleteCardFlowDependencies {
     val trelloKey: String
     val trelloToken: String
 
@@ -31,15 +31,14 @@ interface MoveCardFlowDependencies {
         onError: (String) -> Unit
     )
 
-    fun getCardsFromList( // To find the card to move
+    fun getCardsFromList(
         listId: String,
         onResult: (List<Pair<String, String>>) -> Unit, // List of (CardName, CardId)
         onError: (String) -> Unit
     )
 
-    fun moveCardOnTrello( // New API call
+    fun deleteCardOnTrello(
         cardId: String,
-        targetListId: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     )

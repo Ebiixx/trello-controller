@@ -592,3 +592,33 @@ fun archiveCardOnTrello(
         }
     })
 }
+
+fun deleteCardOnTrello(
+    key: String,
+    token: String,
+    cardId: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val url = "https://api.trello.com/1/cards/$cardId?key=$key&token=$token"
+    val request = Request.Builder()
+        .url(url)
+        .delete() // HTTP DELETE method
+        .build()
+
+    OkHttpClient().newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            onError(e.message ?: "API call failed to delete card")
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            if (response.isSuccessful) {
+                onSuccess()
+            } else {
+                val errorBody = response.body?.string()
+                onError("Error ${response.code} deleting card: $errorBody")
+            }
+            response.close() // Ensure the response body is closed
+        }
+    })
+}

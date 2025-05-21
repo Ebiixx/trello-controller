@@ -1,59 +1,8 @@
 package com.example.trellocontroller.flows
 
-import com.example.trellocontroller.BuildConfig
 import org.json.JSONObject
 
-/**
- * Interface für Abhängigkeiten, die der AddCardFlow von der MainActivity benötigt.
- * Dies hilft, den Flow von der MainActivity zu entkoppeln.
- */
-interface AddCardFlowDependencies {
-    val trelloKey: String
-    val trelloToken: String
-
-    fun speakWithCallback(text: String, onDone: (() -> Unit)? = null)
-    fun startSpeechInput(prompt: String)
-
-    fun getBestMatchingBoardId(
-        boardName: String,
-        onResult: (boardId: String?, matchedBoardName: String?) -> Unit,
-        onError: (String) -> Unit
-    )
-
-    fun getAllBoards(
-        onResult: (List<Pair<String, String>>) -> Unit, // List of (BoardName, BoardId)
-        onError: (String) -> Unit
-    )
-
-    fun getBestMatchingListId(
-        boardId: String,
-        listName: String,
-        onResult: (listId: String?, matchedListName: String?) -> Unit,
-        onError: (String) -> Unit
-    )
-
-    fun getAllLists(
-        boardId: String,
-        onResult: (List<Pair<String, String>>) -> Unit, // List of (ListName, ListId)
-        onError: (String) -> Unit
-    )
-
-    fun addCardToTrello(
-        listId: String,
-        cardName: String,
-        cardDesc: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    )
-
-    // Callback an MainActivity, wenn der Flow abgeschlossen ist (erfolgreich oder nicht)
-    fun onFlowComplete(message: String, success: Boolean)
-
-    // Callback, um den aktuellen Kontext des Flows in der UI anzuzeigen
-    fun updateUiContext(context: String)
-}
-
-class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
+class DeleteCardFlow(private val dependencies: DeleteCardFlowDependencies) {
 
     private enum class State {
         IDLE,
@@ -61,8 +10,9 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
         CONFIRM_BOARD_NOT_FOUND,
         WAITING_FOR_LIST_NAME,
         CONFIRM_LIST_NOT_FOUND,
-        WAITING_FOR_CARD_TITLE,
-        CONFIRM_CREATION
+        WAITING_FOR_CARD_NAME,
+        CONFIRM_CARD_NOT_FOUND,
+        CONFIRM_DELETION
     }
 
     private var currentState: State = State.IDLE
@@ -71,11 +21,12 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
     private var currentBoardName: String? = null
     private var currentListId: String? = null
     private var currentListName: String? = null
-    private var currentCardTitle: String? = null
+    private var currentCardId: String? = null
+    private var currentCardName: String? = null
 
     private var pendingBoardNameFromAI: String? = null
     private var pendingListNameFromAI: String? = null
-    private var pendingCardTitleFromAI: String? = null
+    private var pendingCardNameFromAI: String? = null
 
     fun start(initialDataFromAI: JSONObject?) {
         resetState()
@@ -83,49 +34,42 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
 
         pendingBoardNameFromAI = initialDataFromAI?.optString("board")?.takeIf { it.isNotBlank() }
         pendingListNameFromAI = initialDataFromAI?.optString("list")?.takeIf { it.isNotBlank() }
-        pendingCardTitleFromAI = initialDataFromAI?.optString("title")?.takeIf { it.isNotBlank() }
+        pendingCardNameFromAI = initialDataFromAI?.optString("title")?.takeIf { it.isNotBlank() } // "title" is used for card name
 
         dependencies.updateUiContext(buildContextText())
 
         if (pendingBoardNameFromAI != null) {
             handleBoardNameInput(pendingBoardNameFromAI!!)
+            pendingBoardNameFromAI = null
         } else {
-            dependencies.speakWithCallback("In welchem Board soll die Karte erstellt werden?") {
+            dependencies.speakWithCallback("In welchem Board befindet sich die Karte, die du löschen möchtest?") {
                 dependencies.startSpeechInput("Bitte nenne das Board")
             }
         }
     }
 
     fun handleSpokenInput(input: String) {
-        dependencies.updateUiContext(buildContextText()) // Update context before processing
+        dependencies.updateUiContext(buildContextText())
         when (currentState) {
             State.WAITING_FOR_BOARD_NAME -> handleBoardNameInput(input)
             State.CONFIRM_BOARD_NOT_FOUND -> handleBoardNotFoundConfirmation(input)
             State.WAITING_FOR_LIST_NAME -> handleListNameInput(input)
             State.CONFIRM_LIST_NOT_FOUND -> handleListNotFoundConfirmation(input)
-            State.WAITING_FOR_CARD_TITLE -> handleCardTitleInput(input)
-            State.CONFIRM_CREATION -> handleConfirmCreation(input)
-            State.IDLE -> { /* Sollte nicht passieren, wenn der Flow aktiv ist */ }
+            State.WAITING_FOR_CARD_NAME -> handleCardNameInput(input)
+            State.CONFIRM_CARD_NOT_FOUND -> handleCardNotFoundConfirmation(input)
+            State.CONFIRM_DELETION -> handleConfirmDeletion(input)
+            State.IDLE -> { /* Sollte nicht passieren */ }
         }
     }
 
-    private fun handleBoardNameInput(boardNameInput: String) { // boardNameInput ist bereits normalisiert
-        dependencies.getBestMatchingBoardId(boardNameInput, // Aufruf der "Best Match"-Logik
+    private fun handleBoardNameInput(boardNameInput: String) {
+        dependencies.getBestMatchingBoardId(boardNameInput,
             onResult = { boardId, matchedBoardName ->
                 if (boardId != null) {
                     currentBoardId = boardId
                     currentBoardName = matchedBoardName
                     dependencies.updateUiContext(buildContextText())
-                    if (pendingListNameFromAI != null) {
-                        currentState = State.WAITING_FOR_LIST_NAME
-                        handleListNameInput(pendingListNameFromAI!!)
-                        pendingListNameFromAI = null // Verbraucht
-                    } else {
-                        dependencies.speakWithCallback("Okay, im Board '$currentBoardName'. In welcher Liste soll die Karte erstellt werden?") {
-                            dependencies.startSpeechInput("Bitte nenne die Liste")
-                        }
-                        currentState = State.WAITING_FOR_LIST_NAME
-                    }
+                    proceedToAskListName()
                 } else {
                     dependencies.speakWithCallback("Das Board '$boardNameInput' wurde nicht gefunden. Soll ich dir mögliche Boards nennen?") {
                         dependencies.startSpeechInput("Ja oder Nein?")
@@ -137,7 +81,6 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
                 dependencies.speakWithCallback("Fehler bei der Boardsuche: $errorMsg. Bitte erneut versuchen.") {
                     dependencies.startSpeechInput("Bitte nenne das Board")
                 }
-                // Bleibe im aktuellen Zustand, um erneute Eingabe zu ermöglichen
             }
         )
     }
@@ -163,7 +106,7 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
                     currentState = State.WAITING_FOR_BOARD_NAME
                 }
             )
-        } else { // User said "Nein" to listing boards
+        } else {
             val prompt = "Okay. Bitte wiederhole den Namen für das Board."
             currentState = State.WAITING_FOR_BOARD_NAME
             dependencies.updateUiContext(buildContextText())
@@ -173,27 +116,30 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
         }
     }
 
-    private fun handleListNameInput(listNameInput: String) {
-        val boardId = currentBoardId ?: return dependencies.onFlowComplete("Interner Fehler: Board ID fehlt.", false).also { resetState() }
+    private fun proceedToAskListName() {
+        currentState = State.WAITING_FOR_LIST_NAME
+        dependencies.updateUiContext(buildContextText())
+        if (pendingListNameFromAI != null) {
+            handleListNameInput(pendingListNameFromAI!!)
+            pendingListNameFromAI = null
+        } else {
+            dependencies.speakWithCallback("In welcher Liste auf dem Board '$currentBoardName' ist die Karte?") {
+                dependencies.startSpeechInput("Bitte nenne die Liste")
+            }
+        }
+    }
 
+    private fun handleListNameInput(listNameInput: String) {
+        val boardId = currentBoardId ?: return flowError("Board ID fehlt.")
         dependencies.getBestMatchingListId(boardId, listNameInput,
             onResult = { listId, matchedListName ->
                 if (listId != null) {
                     currentListId = listId
                     currentListName = matchedListName
                     dependencies.updateUiContext(buildContextText())
-                    if (pendingCardTitleFromAI != null) {
-                        currentState = State.WAITING_FOR_CARD_TITLE
-                        handleCardTitleInput(pendingCardTitleFromAI!!)
-                        pendingCardTitleFromAI = null // Verbraucht
-                    } else {
-                        dependencies.speakWithCallback("Okay, in Liste '$currentListName'. Wie soll die Karte heißen?") {
-                            dependencies.startSpeechInput("Bitte nenne den Titel der Karte")
-                        }
-                        currentState = State.WAITING_FOR_CARD_TITLE
-                    }
+                    proceedToAskCardName()
                 } else {
-                    dependencies.speakWithCallback("Die Liste '$listNameInput' wurde im Board '$currentBoardName' nicht gefunden. Soll ich dir mögliche Listen nennen?") {
+                    dependencies.speakWithCallback("Die Liste '$listNameInput' im Board '$currentBoardName' wurde nicht gefunden. Soll ich dir mögliche Listen nennen?") {
                         dependencies.startSpeechInput("Ja oder Nein?")
                     }
                     currentState = State.CONFIRM_LIST_NOT_FOUND
@@ -208,7 +154,7 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
     }
 
     private fun handleListNotFoundConfirmation(input: String) {
-        val boardId = currentBoardId ?: return dependencies.onFlowComplete("Interner Fehler: Board ID fehlt.", false).also { resetState() }
+        val boardId = currentBoardId ?: return flowError("Board ID fehlt.")
         if (input.lowercase().contains("ja")) {
             dependencies.getAllLists(boardId,
                 onResult = { lists ->
@@ -229,7 +175,7 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
                     currentState = State.WAITING_FOR_LIST_NAME
                 }
             )
-        } else { // User said "Nein" to listing lists
+        } else {
             val prompt = "Okay. Bitte wiederhole den Namen für die Liste."
             currentState = State.WAITING_FOR_LIST_NAME
             dependencies.updateUiContext(buildContextText())
@@ -239,40 +185,104 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
         }
     }
 
-    private fun handleCardTitleInput(cardTitleInput: String) {
-        currentCardTitle = cardTitleInput
+    private fun proceedToAskCardName() {
+        currentState = State.WAITING_FOR_CARD_NAME
         dependencies.updateUiContext(buildContextText())
-        val confirmMsg = "Ich werde eine neue Karte mit dem Titel '${currentCardTitle}' in der Liste '${currentListName}' im Board '${currentBoardName}' erstellen. Möchtest du das tun?"
+        if (pendingCardNameFromAI != null) {
+            handleCardNameInput(pendingCardNameFromAI!!)
+            pendingCardNameFromAI = null
+        } else {
+            dependencies.speakWithCallback("Wie heißt die Karte, die du löschen möchtest?") {
+                dependencies.startSpeechInput("Bitte nenne den Kartennamen")
+            }
+        }
+    }
+
+    private fun handleCardNameInput(cardNameInput: String) {
+        val listId = currentListId ?: return flowError("Listen ID fehlt.")
+        dependencies.getCardsFromList(listId,
+            onResult = { cards ->
+                val matchingCards = cards.filter { it.first.equals(cardNameInput, ignoreCase = true) }
+                when (matchingCards.size) {
+                    1 -> {
+                        currentCardId = matchingCards.first().second
+                        currentCardName = matchingCards.first().first
+                        dependencies.updateUiContext(buildContextText())
+                        proceedToConfirmDeletion()
+                    }
+                    0 -> {
+                        dependencies.speakWithCallback("Ich konnte keine Karte mit dem Namen '$cardNameInput' in der Liste '$currentListName' finden. Möchtest du es erneut versuchen?") {
+                            dependencies.startSpeechInput("Erneut versuchen oder abbrechen?")
+                        }
+                        currentState = State.CONFIRM_CARD_NOT_FOUND
+                    }
+                    else -> {
+                        // Mehrere Karten gefunden, nimm die erste und frage nach Bestätigung
+                        currentCardId = matchingCards.first().second
+                        currentCardName = matchingCards.first().first
+                        dependencies.speakWithCallback("Ich habe mehrere Karten mit dem Namen '$cardNameInput' gefunden. Ich nehme die erste: '$currentCardName'. Möchtest du diese löschen?") {
+                            dependencies.startSpeechInput("Ja oder Nein?")
+                        }
+                        currentState = State.CONFIRM_DELETION // Direkt zur Bestätigung, da wir eine Karte ausgewählt haben
+                    }
+                }
+            },
+            onError = { errorMsg ->
+                dependencies.speakWithCallback("Fehler beim Abrufen der Karten: $errorMsg. Bitte erneut versuchen.") {
+                    dependencies.startSpeechInput("Bitte nenne den Kartennamen")
+                }
+            }
+        )
+    }
+
+    private fun handleCardNotFoundConfirmation(input: String) {
+        if (input.lowercase().contains("erneut") || input.lowercase().contains("ja")) {
+            currentState = State.WAITING_FOR_CARD_NAME
+            dependencies.speakWithCallback("Wie heißt die Karte, die du löschen möchtest?") {
+                dependencies.startSpeechInput("Bitte nenne den Kartennamen")
+            }
+        } else {
+            dependencies.speakWithCallback("Okay, Vorgang abgebrochen.") {
+                dependencies.onFlowComplete("Kartenlöschung abgebrochen.", false)
+                resetState()
+            }
+        }
+    }
+
+    private fun proceedToConfirmDeletion() {
+        currentState = State.CONFIRM_DELETION
+        dependencies.updateUiContext(buildContextText())
+        val confirmMsg = "Soll die Karte '$currentCardName' wirklich endgültig gelöscht werden (Liste: '$currentListName', Board: '$currentBoardName')? Diese Aktion kann nicht rückgängig gemacht werden."
         dependencies.speakWithCallback(confirmMsg) {
             dependencies.startSpeechInput("Ja oder Nein?")
         }
-        currentState = State.CONFIRM_CREATION
     }
 
-    private fun handleConfirmCreation(input: String) {
+    private fun handleConfirmDeletion(input: String) {
         if (input.lowercase().contains("ja")) {
-            if (currentListId != null && currentCardTitle != null && currentBoardName != null && currentListName != null) {
-                dependencies.addCardToTrello(currentListId!!, currentCardTitle!!, "", // Beschreibung vorerst leer
-                    onSuccess = {
-                        val successMsg = "Karte '${currentCardTitle}' in Liste '${currentListName}' im Board '${currentBoardName}' erstellt."
-                        dependencies.onFlowComplete(successMsg, true)
-                        resetState()
-                    },
-                    onError = { errMsg ->
-                        dependencies.onFlowComplete("Fehler beim Erstellen der Karte: $errMsg", false)
-                        resetState()
-                    }
-                )
-            } else {
-                dependencies.onFlowComplete("Interner Fehler: Notwendige Informationen für Kartenerstellung fehlen.", false)
-                resetState()
-            }
+            val cardId = currentCardId ?: return flowError("Karten ID fehlt.")
+            dependencies.deleteCardOnTrello(cardId,
+                onSuccess = {
+                    val successMsg = "Karte '$currentCardName' wurde erfolgreich gelöscht."
+                    dependencies.onFlowComplete(successMsg, true)
+                    resetState()
+                },
+                onError = { errMsg ->
+                    dependencies.onFlowComplete("Fehler beim Löschen der Karte: $errMsg", false)
+                    resetState()
+                }
+            )
         } else {
-            dependencies.speakWithCallback("Okay, Karte nicht erstellt.") {
-                dependencies.onFlowComplete("Karten-Erstellung abgebrochen.", false)
+            dependencies.speakWithCallback("Okay, Karte nicht gelöscht.") {
+                dependencies.onFlowComplete("Kartenlöschung abgebrochen.", false)
                 resetState()
             }
         }
+    }
+
+    private fun flowError(message: String) {
+        dependencies.onFlowComplete("Interner Fehler im Lösch-Flow: $message", false)
+        resetState()
     }
 
     fun isActive(): Boolean = currentState != State.IDLE
@@ -283,26 +293,28 @@ class AddCardFlow(private val dependencies: AddCardFlowDependencies) {
         currentBoardName = null
         currentListId = null
         currentListName = null
-        currentCardTitle = null
+        currentCardId = null
+        currentCardName = null
         pendingBoardNameFromAI = null
         pendingListNameFromAI = null
-        pendingCardTitleFromAI = null
-        dependencies.updateUiContext("") // Kontext in der UI zurücksetzen
+        pendingCardNameFromAI = null
+        dependencies.updateUiContext("")
     }
 
     private fun buildContextText(): String {
-        val sb = StringBuilder("Aktion: Karte erstellen")
+        val sb = StringBuilder("Aktion: Karte löschen")
         currentBoardName?.let { sb.append("\nBoard: $it") }
-        currentListName?.let { sb.append("\nZielliste: $it") }
-        currentCardTitle?.let { sb.append("\nKartentitel: $it") }
+        currentListName?.let { sb.append("\nListe: $it") }
+        currentCardName?.let { sb.append("\nKarte: $it") }
 
-        val nextStep = when(currentState) {
+        val nextStep = when (currentState) {
             State.WAITING_FOR_BOARD_NAME -> "Board-Name?"
             State.CONFIRM_BOARD_NOT_FOUND -> "Board nicht gefunden, Vorschläge? (Ja/Nein)"
             State.WAITING_FOR_LIST_NAME -> "Listen-Name?"
             State.CONFIRM_LIST_NOT_FOUND -> "Liste nicht gefunden, Vorschläge? (Ja/Nein)"
-            State.WAITING_FOR_CARD_TITLE -> "Karten-Titel?"
-            State.CONFIRM_CREATION -> "Erstellung bestätigen? (Ja/Nein)"
+            State.WAITING_FOR_CARD_NAME -> "Kartenname?"
+            State.CONFIRM_CARD_NOT_FOUND -> "Karte nicht gefunden, erneut? (Ja/Nein)"
+            State.CONFIRM_DELETION -> "Löschung bestätigen? (Ja/Nein)"
             State.IDLE -> ""
         }
         if (nextStep.isNotBlank()) sb.append("\nNächster Schritt: $nextStep")
